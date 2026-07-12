@@ -17,7 +17,7 @@ func _ready() -> void:
 	_refresh()
 
 func _refresh() -> void:
-	var open: bool = _gm != null and _gm.items_collected >= _gm.items_total
+	var open: bool = _gm != null and _gm.items_collected() >= _gm.items_total()
 	_fill.color = Color(0.3, 0.85, 0.4, 0.85) if open else Color(0.85, 0.3, 0.3, 0.6)
 
 func _on_body_entered(body: Node) -> void:
@@ -29,7 +29,7 @@ func _on_body_exited(_body: Node) -> void:
 func _try(body: Node) -> void:
 	if not multiplayer.is_server():
 		return
-	if body.get("role") != "runner":
+	if body.get("role") != Roles.RUNNER:
 		return
 	if _gm != null:
 		_gm.try_escape()

@@ -11,12 +11,13 @@ func _ready() -> void:
 func _on_body_entered(body: Node) -> void:
 	if not multiplayer.is_server() or _collected:
 		return
-	if body.get("role") != "runner":
+	if body.get("role") != Roles.RUNNER:
 		return
 	_collected = true
 	var gm := get_tree().get_first_node_in_group("game_manager")
 	if gm != null:
 		gm.collect_item()
+		gm.emit_sound(body.global_position)   # grabbing an object is noisy (4.3)
 	_hide.rpc()
 
 @rpc("authority", "call_local", "reliable")
