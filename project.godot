@@ -24,6 +24,10 @@ Net="*res://scripts/net.gd"
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[gui]
+
+theme/custom_font="res://scenes/ui_font.tres"
+
 [input]
 
 move_left={
