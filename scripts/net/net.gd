@@ -31,7 +31,7 @@ func host() -> Error:
 	if err != OK:
 		return err
 	multiplayer.multiplayer_peer = peer
-	players = {1: "runner"}
+	players = {1: Roles.RUNNER}
 	players_changed.emit()
 	return OK
 
@@ -58,7 +58,7 @@ func start_game() -> void:
 func _on_peer_connected(id: int) -> void:
 	if not is_host():
 		return
-	players[id] = "hunter"
+	players[id] = Roles.HUNTER
 	# Tell the newcomer (and refresh everyone) with the full roster.
 	_sync_players.rpc(players)
 	players_changed.emit()

@@ -15,9 +15,13 @@ run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
+[audio]
+
+driver/driver="Dummy"
+
 [autoload]
 
-Net="*res://scripts/net.gd"
+Net="*res://scripts/net/net.gd"
 
 [display]
 
