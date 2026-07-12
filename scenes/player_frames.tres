@@ -1,4 +1,4 @@
-[gd_resource type="SpriteFrames" load_steps=38 format=3]
+[gd_resource type="SpriteFrames" load_steps=66 format=3]
 
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Idle/Idle01.png" id="1"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Idle/Idle02.png" id="2"]
@@ -37,28 +37,62 @@
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Crouch/Crouch04.png" id="35"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Crouch/Crouch05.png" id="36"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Crouch/Crouch06.png" id="37"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Punch01/Punch0101.png" id="38"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Punch01/Punch0102.png" id="39"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Punch01/Punch0103.png" id="40"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Punch01/Punch0104.png" id="41"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Punch01/Punch0105.png" id="42"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Punch01/Punch0106.png" id="43"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull01.png" id="44"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull02.png" id="45"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull03.png" id="46"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull04.png" id="47"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull05.png" id="48"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull06.png" id="49"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned01.png" id="50"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned02.png" id="51"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned03.png" id="52"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned04.png" id="53"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned05.png" id="54"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned06.png" id="55"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned07.png" id="56"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die01.png" id="57"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die02.png" id="58"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die03.png" id="59"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die04.png" id="60"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die05.png" id="61"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die06.png" id="62"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die07.png" id="63"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die08.png" id="64"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die09.png" id="65"]
 
 [resource]
 animations = [{
 "frames": [{
 "duration": 1.0,
 "texture": ExtResource("1")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("2")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("3")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("4")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("5")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("6")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("7")
 }],
@@ -69,25 +103,32 @@ animations = [{
 "frames": [{
 "duration": 1.0,
 "texture": ExtResource("8")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("9")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("10")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("11")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("12")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("13")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("14")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("15")
 }],
@@ -98,10 +139,12 @@ animations = [{
 "frames": [{
 "duration": 1.0,
 "texture": ExtResource("16")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("17")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("18")
 }],
@@ -120,13 +163,16 @@ animations = [{
 "frames": [{
 "duration": 1.0,
 "texture": ExtResource("20")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("21")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("22")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("23")
 }],
@@ -137,25 +183,32 @@ animations = [{
 "frames": [{
 "duration": 1.0,
 "texture": ExtResource("24")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("25")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("26")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("27")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("28")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("29")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("30")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("31")
 }],
@@ -166,23 +219,156 @@ animations = [{
 "frames": [{
 "duration": 1.0,
 "texture": ExtResource("32")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("33")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("34")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("35")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("36")
-}, {
+},
+{
 "duration": 1.0,
 "texture": ExtResource("37")
 }],
 "loop": false,
 "name": &"crouch",
 "speed": 9.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("38")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("39")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("40")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("41")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("42")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("43")
+}],
+"loop": false,
+"name": &"attack",
+"speed": 16.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("44")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("45")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("46")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("47")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("48")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("49")
+}],
+"loop": false,
+"name": &"grab",
+"speed": 12.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("50")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("51")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("52")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("53")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("54")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("55")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("56")
+}],
+"loop": true,
+"name": &"struggle",
+"speed": 10.0
+}, {
+"frames": [{
+"duration": 1.0,
+"texture": ExtResource("57")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("58")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("59")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("60")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("61")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("62")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("63")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("64")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("65")
+}],
+"loop": false,
+"name": &"die",
+"speed": 12.0
 }]
