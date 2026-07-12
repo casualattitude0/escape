@@ -4,6 +4,8 @@ extends Node2D
 ## GameManager for the actual match. The host is the Runner; joiners are Hunters.
 
 const PLAYER := preload("res://scenes/player.tscn")
+const ITEM := preload("res://scenes/item.tscn")
+const DOOR := preload("res://scenes/escape_door.tscn")
 
 const RUNNER_SPAWN := Vector2(208, 1690)
 const HUNTER_SPAWNS := [
@@ -13,11 +15,22 @@ const HUNTER_SPAWNS := [
 	Vector2(1950, 1650),
 ]
 
+# Distinct colours for the x / y / z key objects.
+const ITEM_COLORS := [
+	Color(0.95, 0.85, 0.25),
+	Color(0.3, 0.85, 0.9),
+	Color(0.85, 0.4, 0.9),
+]
+
 @onready var spawner: MultiplayerSpawner = $MultiplayerSpawner
 @onready var players_root: Node = $Players
+@onready var items_root: Node2D = $Items
+@onready var doors_root: Node2D = $Doors
+@onready var terrain: TileMapLayer = $Terrain
 
 # ids that have confirmed their world scene is ready (server-side only)
 var _ready_peers: Dictionary = {}
+var _layout_built := false
 
 func _ready() -> void:
 	spawner.spawn_function = _spawn_player
@@ -43,23 +56,60 @@ func _try_spawn_all() -> void:
 	for id in Net.players:
 		if not players_root.has_node(str(id)):
 			spawner.spawn(id)
+	# Roster is settled — pick and share the item/door layout exactly once.
+	if not _layout_built:
+		_layout_built = true
+		_build_layout.rpc(randi())
+
+## Every peer builds the same layout from the shared seed (see LevelLayout).
+## Items and doors are plain scene nodes with matching names on all peers, so
+## their pickup / open rpcs resolve identically.
+@rpc("authority", "call_local", "reliable")
+func _build_layout(layout_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = layout_seed
+	var hunters := 0
+	for id in Net.players:
+		if Net.players[id] == Roles.HUNTER:
+			hunters += 1
+	var door_count: int = hunters + 1              # GDD 4.1: always one more than Hunters
+	var item_count: int = get_tree().get_first_node_in_group("game_manager").items_total()
+
+	var layout := LevelLayout.new(terrain)
+	var plan := layout.generate(item_count, door_count, rng, RUNNER_SPAWN)
+
+	var item_spots: Array = plan["items"]
+	var door_spots: Array = plan["doors"]
+	for i in item_spots.size():
+		var item := ITEM.instantiate()
+		item.name = "Item%d" % i
+		item.position = item_spots[i]
+		item.get_node("Fill").color = ITEM_COLORS[i % ITEM_COLORS.size()]
+		items_root.add_child(item)
+	for i in door_spots.size():
+		var door := DOOR.instantiate()
+		door.name = "Door%d" % i
+		door.position = door_spots[i]
+		doors_root.add_child(door)
 
 func _spawn_player(id: int) -> Node:
 	var p := PLAYER.instantiate()
 	p.name = str(id)
 	p.set_multiplayer_authority(id)
-	var role: String = Net.players.get(id, "hunter")
+	var role: String = Net.players.get(id, Roles.HUNTER)
 	p.role = role
-	p.position = _spawn_point(id, role)
+	var pos := _spawn_point(id, role)
+	p.position = pos
+	p.spawn_point = pos
 	return p
 
 func _spawn_point(id: int, role: String) -> Vector2:
-	if role == "runner":
+	if role == Roles.RUNNER:
 		return RUNNER_SPAWN
 	# Deterministic Hunter index from sorted hunter ids.
 	var hunters: Array = []
 	for pid in Net.players:
-		if Net.players[pid] == "hunter":
+		if Net.players[pid] == Roles.HUNTER:
 			hunters.append(pid)
 	hunters.sort()
 	var idx := hunters.find(id)

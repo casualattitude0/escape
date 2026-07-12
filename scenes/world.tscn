@@ -1,17 +1,13 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=9 format=3]
 
-[ext_resource type="Script" path="res://scripts/world.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/world/world.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/level.tscn" id="2"]
-[ext_resource type="Script" path="res://scripts/game_manager.gd" id="3"]
-[ext_resource type="Script" path="res://scripts/item.gd" id="4"]
-[ext_resource type="Script" path="res://scripts/escape_door.gd" id="5"]
-[ext_resource type="Script" path="res://scripts/hud.gd" id="6"]
-
-[sub_resource type="CircleShape2D" id="item_shape"]
-radius = 26.0
-
-[sub_resource type="RectangleShape2D" id="door_shape"]
-size = Vector2(40, 150)
+[ext_resource type="Script" path="res://scripts/world/game_manager.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/world/item_system.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/world/grapple_system.gd" id="8"]
+[ext_resource type="Script" path="res://scripts/ui/fog.gd" id="9"]
+[ext_resource type="Script" path="res://scripts/ui/minimap.gd" id="10"]
 
 [node name="World" type="Node2D"]
 script = ExtResource("1")
@@ -35,74 +31,26 @@ spawn_path = NodePath("../Players")
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("3")
 
+[node name="ItemSystem" type="Node" parent="GameManager"]
+script = ExtResource("7")
+
+[node name="GrappleSystem" type="Node" parent="GameManager"]
+script = ExtResource("8")
+
 [node name="Items" type="Node2D" parent="."]
 
-[node name="ItemX" type="Area2D" parent="Items"]
-position = Vector2(320, 1710)
-collision_layer = 0
-collision_mask = 2
-script = ExtResource("4")
-
-[node name="Fill" type="ColorRect" parent="Items/ItemX"]
-offset_left = -14.0
-offset_top = -14.0
-offset_right = 14.0
-offset_bottom = 14.0
-color = Color(0.95, 0.85, 0.25, 1)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Items/ItemX"]
-shape = SubResource("item_shape")
-
-[node name="ItemY" type="Area2D" parent="Items"]
-position = Vector2(800, 1710)
-collision_layer = 0
-collision_mask = 2
-script = ExtResource("4")
-
-[node name="Fill" type="ColorRect" parent="Items/ItemY"]
-offset_left = -14.0
-offset_top = -14.0
-offset_right = 14.0
-offset_bottom = 14.0
-color = Color(0.3, 0.85, 0.9, 1)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Items/ItemY"]
-shape = SubResource("item_shape")
-
-[node name="ItemZ" type="Area2D" parent="Items"]
-position = Vector2(1200, 1710)
-collision_layer = 0
-collision_mask = 2
-script = ExtResource("4")
-
-[node name="Fill" type="ColorRect" parent="Items/ItemZ"]
-offset_left = -14.0
-offset_top = -14.0
-offset_right = 14.0
-offset_bottom = 14.0
-color = Color(0.85, 0.4, 0.9, 1)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="Items/ItemZ"]
-shape = SubResource("item_shape")
-
-[node name="EscapeDoor" type="Area2D" parent="."]
-position = Vector2(2080, 1690)
-collision_layer = 0
-collision_mask = 2
-script = ExtResource("5")
-
-[node name="Fill" type="ColorRect" parent="EscapeDoor"]
-offset_left = -20.0
-offset_top = -75.0
-offset_right = 20.0
-offset_bottom = 75.0
-color = Color(0.85, 0.3, 0.3, 0.6)
-
-[node name="CollisionShape2D" type="CollisionShape2D" parent="EscapeDoor"]
-shape = SubResource("door_shape")
+[node name="Doors" type="Node2D" parent="."]
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("6")
+
+[node name="Fog" type="ColorRect" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0, 0, 0, 0)
+script = ExtResource("9")
 
 [node name="RoleLabel" type="Label" parent="HUD"]
 unique_name_in_owner = true
@@ -111,7 +59,7 @@ offset_top = 12.0
 offset_right = 400.0
 offset_bottom = 40.0
 theme_override_font_sizes/font_size = 22
-text = "你是：Hunter"
+text = "You are: Hunter"
 
 [node name="ItemsLabel" type="Label" parent="HUD"]
 unique_name_in_owner = true
@@ -120,7 +68,7 @@ offset_top = 44.0
 offset_right = 400.0
 offset_bottom = 72.0
 theme_override_font_sizes/font_size = 20
-text = "物件 0 / 3"
+text = "Objects 0 / 3"
 
 [node name="HintLabel" type="Label" parent="HUD"]
 unique_name_in_owner = true
@@ -132,12 +80,13 @@ theme_override_colors/font_color = Color(0.7, 0.72, 0.8, 1)
 text = ""
 
 [node name="CaptureLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
 offset_left = 16.0
 offset_top = 104.0
-offset_right = 200.0
+offset_right = 260.0
 offset_bottom = 128.0
 theme_override_colors/font_color = Color(0.9, 0.55, 0.55, 1)
-text = "讀條壓制"
+text = "Capture"
 
 [node name="CaptureBar" type="ProgressBar" parent="HUD"]
 unique_name_in_owner = true
@@ -148,6 +97,59 @@ offset_bottom = 152.0
 max_value = 100.0
 value = 0.0
 show_percentage = false
+
+[node name="Tick1" type="ColorRect" parent="HUD"]
+offset_left = 97.0
+offset_top = 130.0
+offset_right = 99.0
+offset_bottom = 152.0
+color = Color(0.1, 0.1, 0.12, 1)
+
+[node name="Tick2" type="ColorRect" parent="HUD"]
+offset_left = 179.0
+offset_top = 130.0
+offset_right = 181.0
+offset_bottom = 152.0
+color = Color(0.1, 0.1, 0.12, 1)
+
+[node name="EscapeLabel" type="Label" parent="HUD"]
+unique_name_in_owner = true
+visible = false
+offset_left = 16.0
+offset_top = 158.0
+offset_right = 260.0
+offset_bottom = 182.0
+theme_override_colors/font_color = Color(0.6, 0.9, 0.4, 1)
+text = "Escape"
+
+[node name="EscapeBar" type="ProgressBar" parent="HUD"]
+unique_name_in_owner = true
+visible = false
+offset_left = 16.0
+offset_top = 184.0
+offset_right = 260.0
+offset_bottom = 206.0
+max_value = 100.0
+value = 0.0
+show_percentage = false
+
+[node name="BreakFree" type="Label" parent="HUD"]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = 60.0
+offset_right = 260.0
+offset_bottom = 110.0
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 30
+text = "Being captured!  Mash F to break free!"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="Banner" type="Label" parent="HUD"]
 unique_name_in_owner = true
@@ -165,3 +167,13 @@ theme_override_font_sizes/font_size = 40
 text = ""
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Minimap" type="Control" parent="HUD"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -216.0
+offset_top = 12.0
+offset_right = -16.0
+offset_bottom = 132.0
+mouse_filter = 2
+script = ExtResource("10")
