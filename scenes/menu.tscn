@@ -23,10 +23,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -180.0
-offset_top = -170.0
-offset_right = 180.0
-offset_bottom = 170.0
+offset_left = -200.0
+offset_top = -280.0
+offset_right = 200.0
+offset_bottom = 280.0
 theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="Panel"]
@@ -41,10 +41,42 @@ text = "Host = Runner (escape)    Joiners = Hunters (capture)"
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.7, 0.72, 0.8, 1)
 
+[node name="HostOnlineButton" type="Button" parent="Panel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Host Online Game"
+
+[node name="RoomNameEdit" type="LineEdit" parent="Panel"]
+unique_name_in_owner = true
+layout_mode = 2
+placeholder_text = "Room name"
+
+[node name="BrowseButton" type="Button" parent="Panel"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Browse Games"
+
+[node name="RoomList" type="ItemList" parent="Panel"]
+unique_name_in_owner = true
+visible = false
+custom_minimum_size = Vector2(0, 140)
+layout_mode = 2
+
+[node name="RefreshTimer" type="Timer" parent="Panel"]
+unique_name_in_owner = true
+wait_time = 5.0
+
+[node name="AdvancedLabel" type="Label" parent="Panel"]
+layout_mode = 2
+text = "Advanced: direct IP / tunnel"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.55, 0.57, 0.65, 1)
+theme_override_font_sizes/font_size = 14
+
 [node name="HostButton" type="Button" parent="Panel"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Host"
+text = "Host (LAN)"
 
 [node name="Address" type="LineEdit" parent="Panel"]
 unique_name_in_owner = true
@@ -54,7 +86,7 @@ placeholder_text = "127.0.0.1"
 [node name="JoinButton" type="Button" parent="Panel"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Join"
+text = "Join by Address"
 
 [node name="StartButton" type="Button" parent="Panel"]
 unique_name_in_owner = true
@@ -68,6 +100,16 @@ layout_mode = 2
 text = "Host a room or join one."
 horizontal_alignment = 1
 autowrap_mode = 2
+
+[node name="ShareLabel" type="Label" parent="Panel"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.72, 0.8, 1)
+theme_override_font_sizes/font_size = 14
 
 [node name="Roster" type="Label" parent="Panel"]
 unique_name_in_owner = true
