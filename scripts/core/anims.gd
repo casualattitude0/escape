@@ -6,12 +6,19 @@ extends RefCounted
 ## renames greppable.
 
 const IDLE := "idle"
+const WALK := "walk"          # speed-tier: low ground speed (visual only)
 const RUN := "run"
+const SPRINT := "sprint"      # speed-tier: near top speed (visual only)
 const JUMP := "jump"
+const JUMP_APEX := "jump_apex"  # 3-stage jump: rise -> apex -> fall
 const FALL := "fall"
+const LAND := "land"          # brief landing hold (drives squash + dust)
+const RUN_STOP := "run_stop"  # run/sprint decelerating into idle
+const IDLE_IN := "idle_in"    # transition into idle
 const SLIDE := "slide"
 const CRAWL := "crawl"
 const CROUCH := "crouch"
+const ROLL := "roll"          # tunnel exit-stun tumble (Runner)
 const ATTACK := "attack"
 const GRAB := "grab"          # Hunter suppression hold
 const STRUGGLE := "struggle"  # Runner being suppressed

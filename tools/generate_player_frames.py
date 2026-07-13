@@ -14,12 +14,19 @@ import os
 ANIMS = [
     # --- locomotion ---------------------------------------------------------
     ("idle",     "Sprites/Idle",           "Idle",            7, True,  10.0),
+    ("walk",     "Sprites/Walk",           "Walk",            8, True,  10.0),  # speed-tier: low ground speed (visual only)
     ("run",      "Sprites/Run",            "Run",             8, True,  12.0),
+    ("sprint",   "Sprites/Sprint",         "Sprint",          6, True,  14.0),  # speed-tier: near top speed (visual only)
     ("jump",     "Sprites/Jump",           "Jump",            3, False, 10.0),
+    ("jump_apex","Sprites/JumpMid",        "JumpMid",         1, True,   5.0),  # 3-stage jump: rise -> apex -> fall
     ("fall",     "Sprites/JumpFall",       "JumpFall",        1, True,   5.0),
+    ("land",     "Sprites/Land",           "Land",            2, False, 16.0),  # brief landing hold (drives squash + dust)
+    ("run_stop", "Sprites/RunToIdle",      "RunToIdle",       3, False, 14.0),  # run/sprint decelerating into idle
+    ("idle_in",  "Sprites/IdleTransition", "IdleTransition",  2, False, 12.0),  # transition into idle
     ("slide",    "Sprites/Slide",          "Slide",           4, False, 12.0),
     ("crawl",    "Sprites/Crawl",          "Crawl",           8, True,  10.0),
     ("crouch",   "Sprites/Crouch",         "Crouch",          6, False,  9.0),
+    ("roll",     "Sprites/Roll",           "Roll",           10, False, 16.0),  # tunnel exit-stun tumble (Runner)
     # --- combat / capture (GDD 4.4 / 4.5) -----------------------------------
     ("attack",   "Sprites/Combat/Punch01", "Punch01",         6, False, 16.0),  # Runner melee
     ("grab",     "Sprites/InteractionPull","InteractionPull", 6, False, 12.0),  # Hunter suppression: lunge then hold
