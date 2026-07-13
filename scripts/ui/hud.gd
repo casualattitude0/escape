@@ -24,7 +24,7 @@ func _ready() -> void:
 		_gm.state_changed.connect(_refresh)
 	role_label.text = "You are: Runner (escape)" if _my_role == Roles.RUNNER else "You are: Hunter (capture)"
 	role_label.modulate = Color(0.55, 0.85, 0.65) if _my_role == Roles.RUNNER else Color(0.9, 0.5, 0.5)
-	hint_label.text = "Move A/D   Jump Space   Slide Shift/S into tunnels   Attack F (kills Hunters)" if _my_role == Roles.RUNNER \
+	hint_label.text = "Move A/D   Jump Space   Slide Shift/S into tunnels   Attack F (kills Hunters)\nMinimap marks the key objects to grab and the escape doors" if _my_role == Roles.RUNNER \
 		else "Move A/D   Jump Space   Get close to a slowed Runner and MASH F to capture\nVision is limited — noises clear your sight nearby, or ping the minimap from afar"
 	_refresh()
 
