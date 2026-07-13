@@ -32,9 +32,17 @@ const ITEM_COLORS := [
 var _ready_peers: Dictionary = {}
 var _layout_built := false
 
+# Dev resume (host only; empty unless the dev_resume feature is active and a
+# snapshot exists). See DevSnapshot / scripts/net/dev_snapshot.gd.
+var _resume: Dictionary = {}
+var _active_seed := 0
+
 func _ready() -> void:
+	add_child(PauseMenu.new())        # Esc overlay (every peer has its own)
 	spawner.spawn_function = _spawn_player
 	if multiplayer.is_server():
+		if DevSnapshot.enabled():
+			_resume = DevSnapshot.load_data()
 		_ready_peers[1] = true
 		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 		_try_spawn_all()
@@ -59,7 +67,11 @@ func _try_spawn_all() -> void:
 	# Roster is settled — pick and share the item/door layout exactly once.
 	if not _layout_built:
 		_layout_built = true
-		_build_layout.rpc(randi())
+		# Reuse the saved seed on resume so the map is byte-identical; otherwise
+		# roll a fresh one (and remember it, so a later restart can resume).
+		_active_seed = int(_resume.get("seed", randi())) if not _resume.is_empty() else randi()
+		_build_layout.rpc(_active_seed)
+		_after_layout()
 
 ## Every peer builds the same layout from the shared seed (see LevelLayout).
 ## Items and doors are plain scene nodes with matching names on all peers, so
@@ -98,24 +110,29 @@ func _spawn_player(id: int) -> Node:
 	p.set_multiplayer_authority(id)
 	var role: String = Net.players.get(id, Roles.HUNTER)
 	p.role = role
-	var pos := _spawn_point(id, role)
-	p.position = pos
-	p.spawn_point = pos
+	var base := _spawn_point(id, role)
+	var resumed = _resume_point(id, role)
+	# Start where the player last was (dev resume); respawn point stays the real spawn.
+	p.position = resumed if resumed != null else base
+	p.spawn_point = base
 	return p
 
 func _spawn_point(id: int, role: String) -> Vector2:
 	if role == Roles.RUNNER:
 		return RUNNER_SPAWN
-	# Deterministic Hunter index from sorted hunter ids.
+	var idx := _hunter_index(id)
+	if idx < 0:
+		idx = 0
+	return HUNTER_SPAWNS[idx % HUNTER_SPAWNS.size()]
+
+# Deterministic Hunter index from sorted hunter ids (matches resume keying).
+func _hunter_index(id: int) -> int:
 	var hunters: Array = []
 	for pid in Net.players:
 		if Net.players[pid] == Roles.HUNTER:
 			hunters.append(pid)
 	hunters.sort()
-	var idx := hunters.find(id)
-	if idx < 0:
-		idx = 0
-	return HUNTER_SPAWNS[idx % HUNTER_SPAWNS.size()]
+	return hunters.find(id)
 
 func _on_peer_disconnected(id: int) -> void:
 	if not multiplayer.is_server():
@@ -124,3 +141,66 @@ func _on_peer_disconnected(id: int) -> void:
 	var node := players_root.get_node_or_null(str(id))
 	if node != null:
 		node.queue_free()
+
+# ---- dev resume (host only) -----------------------------------------------
+
+## Position this player should re-enter at on resume, keyed by role (Runner) or
+## hunter index (Hunters) so it survives ENet handing out different peer ids.
+## Returns null when not resuming or nothing was saved for this slot.
+func _resume_point(id: int, role: String) -> Variant:
+	if _resume.is_empty():
+		return null
+	if role == Roles.RUNNER:
+		var rp = _resume.get("runner_pos")
+		return rp if rp is Vector2 else null
+	var arr = _resume.get("hunter_pos", [])
+	var idx := _hunter_index(id)
+	if idx >= 0 and idx < arr.size() and arr[idx] is Vector2:
+		return arr[idx]
+	return null
+
+## Runs on the host right after the layout is built. Re-hides already-collected
+## items, restores match state, then starts the periodic autosave.
+func _after_layout() -> void:
+	if not _resume.is_empty():
+		for item_name in _resume.get("hidden_items", []):
+			var item := items_root.get_node_or_null(str(item_name))
+			if item != null:
+				item._hide.rpc()
+		var gm := get_tree().get_first_node_in_group("game_manager")
+		if gm != null:
+			gm.restore_state(_resume.get("gm", {}))
+	if DevSnapshot.enabled():
+		var timer := Timer.new()
+		timer.wait_time = 1.5
+		timer.timeout.connect(_save_snapshot)
+		add_child(timer)
+		timer.start()
+
+func _save_snapshot() -> void:
+	var gm := get_tree().get_first_node_in_group("game_manager")
+	if gm == null:
+		return
+	var hidden := PackedStringArray()
+	for item in items_root.get_children():
+		if item.get("_collected"):
+			hidden.append(item.name)
+	var runner_pos: Variant = null
+	var hunter_pos: Array = []
+	for c in players_root.get_children():
+		var r = c.get("role")
+		if r == Roles.RUNNER:
+			runner_pos = c.global_position
+		elif r == Roles.HUNTER:
+			var idx := _hunter_index(c.name.to_int())
+			if idx >= 0:
+				if idx >= hunter_pos.size():
+					hunter_pos.resize(idx + 1)
+				hunter_pos[idx] = c.global_position
+	DevSnapshot.save({
+		"seed": _active_seed,
+		"hidden_items": hidden,
+		"runner_pos": runner_pos,
+		"hunter_pos": hunter_pos,
+		"gm": gm.snapshot_state(),
+	})

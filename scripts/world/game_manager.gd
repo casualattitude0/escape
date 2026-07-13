@@ -155,6 +155,30 @@ func _set_winner(w: String) -> void:
 	winner = w
 	grapple.force_end()
 	_broadcast(true)
+	# The round is over — drop any dev snapshot so the next launch starts fresh.
+	if DevSnapshot.enabled():
+		DevSnapshot.clear()
+
+# ---- dev resume (server-only match state; see DevSnapshot) -----------------
+
+func snapshot_state() -> Dictionary:
+	return {
+		"items_collected": items.collected,
+		"winner": winner,
+		"cap": grapple.cap,
+		"esc": grapple.esc,
+		"cap_floor": grapple.cap_floor,
+		"active": grapple.active,
+	}
+
+func restore_state(d: Dictionary) -> void:
+	items.collected = int(d.get("items_collected", 0))
+	winner = str(d.get("winner", ""))
+	grapple.cap = float(d.get("cap", 0.0))
+	grapple.esc = float(d.get("esc", 0.0))
+	grapple.cap_floor = float(d.get("cap_floor", 0.0))
+	grapple.active = bool(d.get("active", false))
+	_broadcast(true)   # push the restored state to every peer's HUD
 
 func _broadcast(reliable: bool) -> void:
 	if reliable:

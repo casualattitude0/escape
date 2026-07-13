@@ -19,28 +19,70 @@ func _ready() -> void:
 	Net.connection_ok.connect(func(): status.text = "Connected. Waiting for host to start...")
 	Net.connection_failed_.connect(func(): _reset("Connection failed. Check the IP."))
 	Net.server_left.connect(func(): _reset("The host has left."))
+	var last := Net.last_address()
+	if last != "" and address.text.strip_edges() == "":
+		address.text = last
 	_refresh()
 	_handle_cli()
 
-## Dev convenience for testing with two windows, e.g.
-##   Godot --path . -- host          (opens a room, auto-starts on 1st join)
-##   Godot --path . -- join=127.0.0.1
+## Dev convenience so a script edit + restart drops you straight back into a
+## match with no clicks.
+##
+## Explicit launch tokens (used by the headless smoke test):
+##   host              open a room and auto-start once a Hunter joins
+##   join[=<ip>]       auto-join (default 127.0.0.1)
+##   resume            also restore the in-progress match (DevSnapshot)
+##
+## With no tokens, when running from the editor (Net.DEV_AUTOCONNECT), the two
+## windows self-negotiate: each tries to host, whoever binds the port first is
+## the Runner and the other auto-joins as a Hunter. This needs no per-instance
+## editor config (which the running editor owns and overwrites) — just "Run
+## Multiple Instances" with a count of 2. Never fires in an exported build.
 func _handle_cli() -> void:
+	var mode := ""
+	var resume := false
+	var auto := false
 	for arg in OS.get_cmdline_user_args():
 		if arg == "host":
-			_auto_start = true
-			_on_host()
+			mode = "host"
 		elif arg.begins_with("join"):
+			mode = "join"
 			var parts := arg.split("=")
 			if parts.size() > 1:
 				address.text = parts[1]
+		elif arg == "resume":
+			resume = true
+		elif arg == "auto":
+			auto = true
+	# Self-negotiate: explicit "auto" token, or the editor two-window loop.
+	if mode == "" and not Net.suppress_autoconnect and (auto or (Net.DEV_AUTOCONNECT and OS.has_feature("editor"))):
+		if not auto:
+			resume = true          # the editor loop always resumes
+		Net.dev_resume = resume
+		if Net.host() == OK:
+			# Won the race — we are the Runner. Auto-start when a Hunter joins.
+			_auto_start = true
+			_host_succeeded()
+		else:
+			# Someone already hosts — join them.
+			address.text = "127.0.0.1"
 			_on_join()
+		return
+	Net.dev_resume = resume
+	if mode == "host":
+		_auto_start = true
+		_on_host()
+	elif mode == "join":
+		_on_join()
 
 func _on_host() -> void:
 	var err := Net.host()
 	if err != OK:
 		status.text = "Failed to host (%d). The port may be in use." % err
 		return
+	_host_succeeded()
+
+func _host_succeeded() -> void:
 	status.text = "Room open (you are the Runner). Waiting for Hunters..."
 	_enter_connected(true)
 
