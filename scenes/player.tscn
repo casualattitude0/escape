@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player.gd" id="1"]
 [ext_resource type="SpriteFrames" path="res://scenes/player_frames.tres" id="2"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" path="res://scripts/player/player_combat.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/player/player_health.gd" id="5"]
 [ext_resource type="Script" path="res://scripts/player/player_animator.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/player/player_effects.gd" id="7"]
 
 [sub_resource type="CapsuleShape2D" id="Cap_stand"]
 radius = 13.0
@@ -39,8 +40,11 @@ collision_layer = 2
 collision_mask = 1
 script = ExtResource("1")
 
-[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="."]
-position = Vector2(0, -6)
+[node name="SpritePivot" type="Node2D" parent="."]
+position = Vector2(0, 20)
+
+[node name="AnimatedSprite2D" type="AnimatedSprite2D" parent="SpritePivot"]
+position = Vector2(0, -26)
 sprite_frames = ExtResource("2")
 animation = &"idle"
 autoplay = "idle"
@@ -87,3 +91,6 @@ script = ExtResource("5")
 
 [node name="Animator" type="Node" parent="."]
 script = ExtResource("6")
+
+[node name="Effects" type="Node" parent="."]
+script = ExtResource("7")

@@ -8,14 +8,23 @@ class_name PlayerAnimator
 const RUNNER_COL := Color(0.55, 0.9, 0.65)
 const HUNTER_COL := Color(1.0, 0.55, 0.55)
 
+# Lockout durations mirror the non-looping anim's own frame count/fps so the
+# lock releases right as the animation would naturally finish.
+const LAND_LOCK_TIME := 2.0 / 16.0      # Land: 2 frames @ 16fps
+const RUN_STOP_LOCK_TIME := 3.0 / 14.0  # RunToIdle: 3 frames @ 14fps
+
 @onready var body: CharacterBody2D = get_parent()
-@onready var sprite: AnimatedSprite2D = body.get_node("AnimatedSprite2D")
+@onready var sprite: AnimatedSprite2D = body.get_node("SpritePivot/AnimatedSprite2D")
 @onready var name_tag: Label = body.get_node("NameTag")
 
 var _shown_role: String = ""
 var _prev_cap := 0.0             # last seen bar values, to detect a fresh mash tap
 var _prev_esc := 0.0
 var _hooked := false
+
+var _land_lock_left := 0.0       # counts down while LAND is forced over locomotion
+var _run_stop_lock_left := 0.0   # counts down while RUN_STOP is forced over locomotion
+var _prev_loco := Anim.IDLE      # last raw locomotion_anim(), to catch the run->idle edge
 
 ## Every peer, every frame: visuals + (remote) mirror the replicated animation.
 func render() -> void:
@@ -27,7 +36,9 @@ func render() -> void:
 			sprite.play(body.net_anim)
 
 ## Authority only: choose the animation, play it, and publish for remote copies.
-func publish() -> void:
+## `delta` drives the LAND/RUN_STOP lockout timers (they hold their anim for a
+## fixed duration regardless of how fast locomotion_anim() changes underneath).
+func publish(delta: float) -> void:
 	var dir: float = body.movement.last_dir
 	if body.combat.grappling:
 		_face_opponent()                 # tug-of-war: orient toward the other fighter
@@ -35,7 +46,21 @@ func publish() -> void:
 		pass                              # locked facing: don't flip mid-slide
 	elif dir != 0.0:
 		sprite.flip_h = dir < 0.0
-	var anim := _pick_anim()
+
+	_land_lock_left = maxf(_land_lock_left - delta, 0.0)
+	_run_stop_lock_left = maxf(_run_stop_lock_left - delta, 0.0)
+
+	var loco: String = body.movement.locomotion_anim()
+	if body.movement.just_landed and not body.combat.grappling:
+		# Landing always wins: cancel any pending run-stop so LAND reads clearly.
+		_land_lock_left = LAND_LOCK_TIME
+		_run_stop_lock_left = 0.0
+	elif (_prev_loco == Anim.RUN or _prev_loco == Anim.SPRINT) and loco == Anim.IDLE:
+		# Decelerating straight into idle: play the run-stop tail first.
+		_run_stop_lock_left = RUN_STOP_LOCK_TIME
+	_prev_loco = loco
+
+	var anim := _pick_anim(loco)
 	# Only (re)start on change so non-looping anims play once and hold their last
 	# frame instead of restarting every frame.
 	if sprite.animation != anim:
@@ -43,14 +68,20 @@ func publish() -> void:
 	body.net_anim = anim
 	body.net_flip = sprite.flip_h
 
-func _pick_anim() -> String:
+func _pick_anim(loco: String) -> String:
 	if body.dead:
 		return Anim.DIE
 	if body.combat.grappling:
 		# The mash-off reads as a tug-of-war: the Runner heaves away (pull), the
 		# Hunter shoves in (push).
 		return Anim.PULL if body.role == Roles.RUNNER else Anim.PUSH
-	return body.movement.locomotion_anim()
+	if body.movement.exit_stun_active():
+		return Anim.ROLL              # tunnel exit stiffness reads as a tumble-recovery
+	if _land_lock_left > 0.0:
+		return Anim.LAND
+	if _run_stop_lock_left > 0.0:
+		return Anim.RUN_STOP
+	return loco
 
 ## Point the sprite at the other fighter for the mash-off. The push sprite faces
 ## right by default and the pull sprite faces left, so the two roles flip on
