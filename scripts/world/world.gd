@@ -41,8 +41,20 @@ func _ready() -> void:
 	add_child(PauseMenu.new())        # Esc overlay (every peer has its own)
 	spawner.spawn_function = _spawn_player
 	if multiplayer.is_server():
-		if DevSnapshot.enabled():
+		add_to_group("world_host")    # so Net can trigger a rejoin resync
+		# Resume source: a live rejoin snapshot (a client reconnected) takes
+		# priority, else the dev-resume snapshot from disk.
+		if not Net.rejoin_snapshot.is_empty():
+			_resume = Net.rejoin_snapshot
+			Net.rejoin_snapshot = {}
+		elif DevSnapshot.enabled():
 			_resume = DevSnapshot.load_data()
+		# A snapshot saved against an older version of the map (edited terrain,
+		# re-run tools/generate_level.py, etc.) has stale seeds/positions that no
+		# longer correspond to real floor — resuming it can drop players outside
+		# the level. Discard it and start a fresh round instead.
+		if not _resume.is_empty() and _resume.get("terrain_sig") != _terrain_signature():
+			_resume = {}
 		_ready_peers[1] = true
 		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 		_try_spawn_all()
@@ -53,25 +65,49 @@ func _ready() -> void:
 func _announce_ready() -> void:
 	if not multiplayer.is_server():
 		return
-	_ready_peers[multiplayer.get_remote_sender_id()] = true
+	var peer := multiplayer.get_remote_sender_id()
+	_ready_peers[peer] = true
+	# _resume only exists on the host (see _ready()); the custom spawn_function
+	# below runs independently on every peer, so without this each remote peer's
+	# own _spawn_player() sees an empty _resume and falls back to the plain spawn
+	# point — and since that peer is the multiplayer authority for its own player,
+	# that wrong position is what actually sticks. Send it before _try_spawn_all()
+	# so it lands ahead of the spawn messages on this same reliable channel.
+	_receive_resume.rpc_id(peer, _resume)
 	_try_spawn_all()
+
+@rpc("authority", "reliable")
+func _receive_resume(resume: Dictionary) -> void:
+	_resume = resume
 
 func _try_spawn_all() -> void:
 	# Wait until every rostered peer has its world ready, so no spawn is missed.
 	for id in Net.players:
 		if not _ready_peers.has(id):
 			return
+	if _layout_built:
+		return
+	# Roster is settled — spawn everyone and share the layout exactly once.
 	for id in Net.players:
 		if not players_root.has_node(str(id)):
 			spawner.spawn(id)
-	# Roster is settled — pick and share the item/door layout exactly once.
-	if not _layout_built:
-		_layout_built = true
-		# Reuse the saved seed on resume so the map is byte-identical; otherwise
-		# roll a fresh one (and remember it, so a later restart can resume).
-		_active_seed = int(_resume.get("seed", randi())) if not _resume.is_empty() else randi()
-		_build_layout.rpc(_active_seed)
-		_after_layout()
+	_layout_built = true
+	# Reuse the saved seed on resume so the map is byte-identical; otherwise roll
+	# a fresh one (and remember it, so a later restart / rejoin can resume).
+	_active_seed = int(_resume.get("seed", randi())) if not _resume.is_empty() else randi()
+	_build_layout.rpc(_active_seed)
+	_after_layout()
+
+## Called on the host (via Net) when a client (re)joins mid-match. Snapshot the
+## live match, then have EVERYONE reload the world together. The reload rebuilds
+## the MultiplayerSpawner from scratch on every peer — including the newcomer —
+## which sidesteps Godot's fragile mid-session spawn back-fill, and the snapshot
+## is restored on the fresh world so the match continues where it left off.
+func rejoin_new_peer() -> void:
+	if not multiplayer.is_server() or not _layout_built:
+		return
+	Net.rejoin_snapshot = _build_snapshot()
+	Net.reload_all()
 
 ## Every peer builds the same layout from the shared seed (see LevelLayout).
 ## Items and doors are plain scene nodes with matching names on all peers, so
@@ -112,7 +148,7 @@ func _spawn_player(id: int) -> Node:
 	p.role = role
 	var base := _spawn_point(id, role)
 	var resumed = _resume_point(id, role)
-	# Start where the player last was (dev resume); respawn point stays the real spawn.
+	# Start where the player last was (dev resume / rejoin); respawn point stays real.
 	p.position = resumed if resumed != null else base
 	p.spawn_point = base
 	return p
@@ -145,7 +181,7 @@ func _on_peer_disconnected(id: int) -> void:
 # ---- dev resume (host only) -----------------------------------------------
 
 ## Position this player should re-enter at on resume, keyed by role (Runner) or
-## hunter index (Hunters) so it survives ENet handing out different peer ids.
+## hunter index (Hunters) so it survives the transport handing out different peer ids.
 ## Returns null when not resuming or nothing was saved for this slot.
 func _resume_point(id: int, role: String) -> Variant:
 	if _resume.is_empty():
@@ -178,9 +214,17 @@ func _after_layout() -> void:
 		timer.start()
 
 func _save_snapshot() -> void:
+	var snap := _build_snapshot()
+	if not snap.is_empty():
+		DevSnapshot.save(snap)
+
+## Capture the live match state (seed, taken items, player positions, game state)
+## as a plain dictionary. Used for both the dev-resume autosave and the live
+## rejoin snapshot. Returns {} if the match isn't ready.
+func _build_snapshot() -> Dictionary:
 	var gm := get_tree().get_first_node_in_group("game_manager")
 	if gm == null:
-		return
+		return {}
 	var hidden := PackedStringArray()
 	for item in items_root.get_children():
 		if item.get("_collected"):
@@ -197,10 +241,20 @@ func _save_snapshot() -> void:
 				if idx >= hunter_pos.size():
 					hunter_pos.resize(idx + 1)
 				hunter_pos[idx] = c.global_position
-	DevSnapshot.save({
+	return {
 		"seed": _active_seed,
 		"hidden_items": hidden,
 		"runner_pos": runner_pos,
 		"hunter_pos": hunter_pos,
 		"gm": gm.snapshot_state(),
-	})
+		"terrain_sig": _terrain_signature(),
+	}
+
+## Cheap fingerprint of the baked terrain (cell coords + tile ids), so a
+## snapshot can detect it was saved against a since-edited map.
+func _terrain_signature() -> int:
+	var parts := PackedStringArray()
+	for c in terrain.get_used_cells():
+		parts.append("%d,%d,%d" % [c.x, c.y, terrain.get_cell_source_id(c)])
+	parts.sort()
+	return ",".join(parts).hash()
