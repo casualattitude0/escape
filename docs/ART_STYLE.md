@@ -4,6 +4,7 @@
 
 - **[ART_CHARACTER.md](ART_CHARACTER.md)** — 角色（Runner / Hunter / 可互動物）：鮮豔糖果派對怪物
 - **[ART_SCENE.md](ART_SCENE.md)** — 場景（設施 / 背景 / UI）：黑白線稿 SCP 巨構
+- **[ART_KEYVISUAL.md](ART_KEYVISUAL.md)** — 主視覺：把上色本模型一次講完的北極星基準圖
 
 ---
 
