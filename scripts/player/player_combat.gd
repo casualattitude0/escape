@@ -6,23 +6,14 @@ class_name PlayerCombat
 ## this component decides whether this player is a participant, snaps a grabbing
 ## Hunter onto the Runner, and forwards taps.
 
-const ATTACK_ANIM_TIME := 0.38    # how long the attack animation plays
 const GRAB_DISTANCE := 34.0       # gap the Hunter closes to so the grab connects
 const GRAB_SNAP := 260.0          # how fast the Hunter slides into grab distance
 
 @onready var body: CharacterBody2D = get_parent()
 
-var attack_left: float = 0.0      # attack animation countdown
 var grappling: bool = false       # locked in an active grapple this frame
 var _grab_runner: Node2D
 var _runner_ref: Node
-
-func tick_timers(delta: float) -> void:
-	if attack_left > 0.0:
-		attack_left -= delta
-
-func attacking() -> bool:
-	return attack_left > 0.0
 
 ## Decide grapple participation for this frame. Runner: participating whenever a
 ## grapple is active. Hunter: participating while a grapple is active and it is in
@@ -64,12 +55,11 @@ func handle_input() -> void:
 	if body.role == Roles.HUNTER:
 		if not body.dead:
 			gm.hunter_press.rpc_id(1)     # server: start a grab, or add a capture tap
+			body.animator.pulse()         # instant local strain feedback on the tap
 	else:
 		if gm.grappling():
 			gm.runner_press.rpc_id(1)     # escape tap
-		elif not body.movement.in_tunnel and not body.movement.exit_stun_active():
-			attack_left = ATTACK_ANIM_TIME
-			gm.runner_press.rpc_id(1)     # melee attack (kills nearby Hunters)
+			body.animator.pulse()         # instant local strain feedback on the tap
 
 func _find_runner(gm: Node) -> Node2D:
 	if _runner_ref != null and is_instance_valid(_runner_ref):

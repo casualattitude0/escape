@@ -41,9 +41,14 @@ func _physics_process(delta: float) -> void:
 	if not is_multiplayer_authority():
 		return
 
-	combat.tick_timers(delta)
 	health.tick(delta)
 	if dead:
+		movement.freeze()
+		animator.publish()
+		return
+
+	# Paused (local pause menu open): hold still but stay replicated.
+	if Net.local_input_locked:
 		movement.freeze()
 		animator.publish()
 		return

@@ -24,6 +24,8 @@ ANIMS = [
     ("attack",   "Sprites/Combat/Punch01", "Punch01",         6, False, 16.0),  # Runner melee
     ("grab",     "Sprites/InteractionPull","InteractionPull", 6, False, 12.0),  # Hunter suppression: lunge then hold
     ("struggle", "Sprites/Combat/Stunned", "Stunned",         7, True,  10.0),  # Runner being suppressed
+    ("push",     "Sprites/Push",           "Push",            8, True,  14.0),  # Hunter shoving during the mash-off
+    ("pull",     "Sprites/Pull",           "Pull",            6, True,  14.0),  # Runner heaving away during the mash-off
     ("die",      "Sprites/Die",            "Die",             9, False, 12.0),  # Hunter killed
 ]
 

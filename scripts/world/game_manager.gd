@@ -16,7 +16,6 @@ signal state_changed
 signal sound_heard(world_pos: Vector2, heard_near: bool)
 
 var capture_range := 110.0       # how close a Hunter must be to grab / mash
-var attack_range := 150.0        # Runner's counter-attack (kill) reach
 var sound_near_radius := 540.0   # Hunters within this of a noise see clearly;
                                  # farther ones only get a minimap ping
 
@@ -117,8 +116,6 @@ func runner_press() -> void:
 			_broadcast(true)   # escaped -> grapple ended
 		else:
 			_broadcast(false)
-	else:
-		_do_attack()
 
 # ---- per-frame upkeep -----------------------------------------------------
 
@@ -134,18 +131,6 @@ func _physics_process(delta: float) -> void:
 		if not _any_hunter_in_range(runner):
 			grapple.end(false)
 		_broadcast(false)
-
-# ---- attack (Runner melee, kills nearby Hunters) --------------------------
-
-func _do_attack() -> void:
-	var runner := _find_runner()
-	if runner == null:
-		return
-	for c in _players.get_children():
-		if c.get("role") != Roles.HUNTER or c.dead:
-			continue
-		if c.global_position.distance_to(runner.global_position) <= attack_range:
-			c.kill.rpc_id(c.get_multiplayer_authority())   # killed Hunter respawns
 
 # ---- helpers --------------------------------------------------------------
 
