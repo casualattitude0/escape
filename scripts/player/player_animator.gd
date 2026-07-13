@@ -3,7 +3,7 @@ class_name PlayerAnimator
 
 ## Drives the AnimatedSprite2D and name tag from the body's state. The authority
 ## picks the animation and publishes it (net_anim/net_flip); remote copies mirror
-## those. Also handles role tint, the capturable flash, and the dead dim.
+## those. Also handles role tint and the dead dim.
 
 const RUNNER_COL := Color(0.55, 0.9, 0.65)
 const HUNTER_COL := Color(1.0, 0.55, 0.55)
@@ -29,7 +29,11 @@ func render() -> void:
 ## Authority only: choose the animation, play it, and publish for remote copies.
 func publish() -> void:
 	var dir: float = body.movement.last_dir
-	if dir != 0.0 and not body.combat.grappling:
+	if body.combat.grappling:
+		_face_opponent()                 # tug-of-war: orient toward the other fighter
+	elif body.movement.sliding:
+		pass                              # locked facing: don't flip mid-slide
+	elif dir != 0.0:
 		sprite.flip_h = dir < 0.0
 	var anim := _pick_anim()
 	# Only (re)start on change so non-looping anims play once and hold their last
@@ -48,6 +52,34 @@ func _pick_anim() -> String:
 		return Anim.PULL if body.role == Roles.RUNNER else Anim.PUSH
 	return body.movement.locomotion_anim()
 
+## Point the sprite at the other fighter for the mash-off. The push sprite faces
+## right by default and the pull sprite faces left, so the two roles flip on
+## opposite conditions to end up facing each other.
+func _face_opponent() -> void:
+	var other := _grapple_opponent()
+	if other == null:
+		return
+	var to_right := other.global_position.x > body.global_position.x
+	if body.role == Roles.RUNNER:
+		sprite.flip_h = to_right          # pull: default faces left -> flip to face a Hunter on the right
+	else:
+		sprite.flip_h = not to_right      # push: default faces right -> flip to face a Runner on the left
+
+func _grapple_opponent() -> Node2D:
+	if body.gm == null:
+		return null
+	var want := Roles.HUNTER if body.role == Roles.RUNNER else Roles.RUNNER
+	var best: Node2D = null
+	var best_d := INF
+	for c in body.gm.players().get_children():
+		if c.get("role") != want or c.get("dead"):
+			continue
+		var d: float = body.global_position.distance_to(c.global_position)
+		if d < best_d:
+			best_d = d
+			best = c
+	return best
+
 func _apply_visual() -> void:
 	if body.role != _shown_role:
 		_shown_role = body.role
@@ -55,8 +87,7 @@ func _apply_visual() -> void:
 		name_tag.text = base + (" (You)" if body.is_multiplayer_authority() else "")
 		name_tag.modulate = RUNNER_COL if body.role == Roles.RUNNER else HUNTER_COL
 	if body.role == Roles.RUNNER:
-		# Flash yellow while capturable so everyone sees a rescue/finish moment.
-		sprite.modulate = Color(1, 1, 0.35) if body.capturable else Color(1, 1, 1)
+		sprite.modulate = Color(1, 1, 1)
 	else:
 		sprite.modulate = Color(0.5, 0.32, 0.32) if body.dead else HUNTER_COL
 
