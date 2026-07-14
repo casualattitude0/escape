@@ -884,6 +884,9 @@ func _apply_port_override() -> void:
 			Net.set_port_override(p)
 
 func _enter_connected(is_host: bool) -> void:
+	# A deliberate (re)connect — clear the "left to menu" latch so the dev loop
+	# resumes auto-connecting on future launches.
+	Net.clear_left_to_menu()
 	_connected = true
 	_stop_room_refresh()
 	for key in _nav_btns:
@@ -1008,6 +1011,9 @@ func _handle_cli() -> void:
 			var parts := arg.split("=")
 			if parts.size() > 1:
 				_set_addr(parts[1])
+		elif arg.begins_with("map="):
+			Net.world_scene = "res://scenes/levels/world2.tscn" if arg.split("=")[1] == "2" \
+					else "res://scenes/levels/world.tscn"
 		elif arg == "resume":
 			resume = true
 		elif arg == "auto":
@@ -1018,6 +1024,11 @@ func _handle_cli() -> void:
 			Net.set_token(arg.split("=")[1])
 		elif arg.begins_with("relay="):
 			Net.set_relay_url_override(arg.split("=", true, 1)[1])
+	# If we deliberately left to the menu, stay at the lobby on launch instead of
+	# auto-reconnecting. Persists across every launch (and both editor instances)
+	# until the player deliberately reconnects — see _clear_left_to_menu callers.
+	if Net.left_to_menu():
+		Net.suppress_autoconnect = true
 	# Self-negotiate: explicit "auto" token, or the editor two-window loop.
 	if mode == "" and not Net.suppress_autoconnect and (auto or (Net.DEV_AUTOCONNECT and OS.has_feature("editor"))):
 		if not auto:

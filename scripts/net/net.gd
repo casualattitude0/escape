@@ -9,13 +9,14 @@ const MAX_CLIENTS := 4          # up to 4 Hunters + 1 Runner
 const PREFS_PATH := "user://net.cfg"   # remembers the last address you joined
 
 ## Deployed relay server's WebSocket endpoint (see relay-server/, deployed to
-## GCP project escape-502321 / Cloud Run service "escape-relay", us-central1).
+## GCP project escape-502321 / Cloud Run service "escape-relay", asia-east1 —
+## Taiwan, since the playerbase is in Asia; a us-central1 relay added ~150ms).
 ## Lets any player host or join over the internet with no port-forwarding, by
 ## routing traffic through this always-on relay instead of connecting
 ## host<->client directly — see RelayMultiplayerPeer and relay-server/main.go
 ## for the wire protocol. Override for local testing with the "relay=<url>"
 ## CLI token (see menu.gd _handle_cli) or by calling set_relay_url_override().
-const RELAY_WS_URL := "wss://escape-relay-jffrb3gijq-uc.a.run.app/connect"
+const RELAY_WS_URL := "wss://escape-relay-562296751796.asia-east1.run.app/connect"
 
 ## WebSocketMultiplayerPeer (not ENet) so a web-exported client can Join a
 ## game — browsers can't open raw UDP sockets, only WebSocket ones. A browser
@@ -54,6 +55,10 @@ var suppress_autoconnect := false
 # True once the world scene has loaded (set on every peer via _load_world). The
 # host uses it to route a late/reconnecting client straight into the match.
 var match_active := false
+
+# Which map to play. Host picks it (default map 1); the choice rides along in the
+# _load_world RPC so every peer loads the same scene. See scenes/world2.tscn.
+var world_scene := "res://scenes/levels/world.tscn"
 
 # Live match snapshot handed across a rejoin reload (host-only). When a client
 # (re)joins mid-match the host fills this, everyone reloads the world, and the
@@ -157,6 +162,26 @@ func _save_last_address(address: String) -> void:
 	cfg.set_value("net", "address", address)
 	cfg.save(PREFS_PATH)
 
+## Persisted twin of suppress_autoconnect: set when the player deliberately
+## leaves to the menu, so the editor dev loop stays at the lobby on every launch
+## afterwards (the in-memory flag resets per process). It stays set — even across
+## the editor's multi-instance runs, where each window reads it independently —
+## until the player deliberately reconnects, which calls clear_left_to_menu().
+func set_left_to_menu(v: bool) -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(PREFS_PATH)   # keep any other prefs; ignore "missing file"
+	cfg.set_value("net", "left_to_menu", v)
+	cfg.save(PREFS_PATH)
+
+func left_to_menu() -> bool:
+	var cfg := ConfigFile.new()
+	if cfg.load(PREFS_PATH) != OK:
+		return false
+	return bool(cfg.get_value("net", "left_to_menu", false))
+
+func clear_left_to_menu() -> void:
+	set_left_to_menu(false)
+
 # ---- relay-based hosting/joining (internet-wide lobby list) ---------------
 
 func relay_ws_url() -> String:
@@ -244,7 +269,7 @@ func leave() -> void:
 func start_game() -> void:
 	# Host only. Everyone loads the world together.
 	if is_host():
-		_load_world.rpc()
+		_load_world.rpc(world_scene)
 
 # ---- reconnection handshake -----------------------------------------------
 # A client, once its ENet link is up, tells the host who it is (its token). The
@@ -271,11 +296,11 @@ func _register(token: String) -> void:
 		if world != null:
 			world.rejoin_new_peer()
 		else:
-			_load_world.rpc_id(peer)   # host not in world yet; just send them in
+			_load_world.rpc_id(peer, world_scene)   # host not in world yet; just send them in
 
 func reload_all() -> void:
 	if is_host():
-		_load_world.rpc()
+		_load_world.rpc(world_scene)
 
 func _on_peer_connected(_id: int) -> void:
 	pass   # role is assigned when the peer registers (see _register)
@@ -299,9 +324,11 @@ func _sync_players(roster: Dictionary) -> void:
 	players_changed.emit()
 
 @rpc("authority", "call_local", "reliable")
-func _load_world() -> void:
+func _load_world(scene: String = "") -> void:
 	match_active = true
-	get_tree().change_scene_to_file("res://scenes/world.tscn")
+	if scene != "":
+		world_scene = scene
+	get_tree().change_scene_to_file(world_scene)
 
 # ---- client-side connection callbacks -------------------------------------
 

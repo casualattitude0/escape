@@ -69,7 +69,13 @@ func close() -> void:
 
 func _leave() -> void:
 	Net.local_input_locked = false
-	# Stay at the lobby instead of instantly re-connecting via the dev loop.
+	# Stay at the lobby instead of instantly re-connecting via the dev loop —
+	# this process (suppress_autoconnect) and the next launch (persisted flag).
 	Net.suppress_autoconnect = true
+	Net.set_left_to_menu(true)
+	# Deliberately leaving the match: drop the dev snapshot so the next launch
+	# starts fresh at the lobby instead of resuming back into this round.
+	if DevSnapshot.enabled():
+		DevSnapshot.clear()
 	Net.leave()
-	get_tree().change_scene_to_file("res://scenes/menu.tscn")
+	get_tree().change_scene_to_file("res://scenes/ui/menu.tscn")
