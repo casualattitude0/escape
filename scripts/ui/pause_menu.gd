@@ -36,6 +36,10 @@ func _build() -> void:
 	vbox.add_child(title)
 
 	_resume_btn = _make_button(vbox, "Resume", close)
+	# Only the host drives the match, so a restart only makes sense there — for a
+	# client the button would silently do nothing (reload_all is host-only).
+	if Net.is_host():
+		_make_button(vbox, "Restart Match", _restart)
 	_make_button(vbox, "Leave to Menu", _leave)
 	_make_button(vbox, "Quit Game", func(): get_tree().quit())
 
@@ -66,6 +70,15 @@ func open() -> void:
 func close() -> void:
 	visible = false
 	Net.local_input_locked = false
+
+func _restart() -> void:
+	close()
+	# Reload the world for every peer together, starting the match fresh. Drop the
+	# dev snapshot so the reload spawns a clean round rather than resuming the old
+	# one (mirrors the intent behind _leave clearing it).
+	if DevSnapshot.enabled():
+		DevSnapshot.clear()
+	Net.reload_all()
 
 func _leave() -> void:
 	Net.local_input_locked = false
