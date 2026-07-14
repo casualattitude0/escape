@@ -1,4 +1,4 @@
-[gd_resource type="SpriteFrames" load_steps=112 format=3]
+[gd_resource type="SpriteFrames" load_steps=118 format=3]
 
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Idle/Idle01.png" id="1"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Idle/Idle02.png" id="2"]
@@ -102,15 +102,21 @@
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull04.png" id="100"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull05.png" id="101"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull06.png" id="102"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die01.png" id="103"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die02.png" id="104"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die03.png" id="105"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die04.png" id="106"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die05.png" id="107"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die06.png" id="108"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die07.png" id="109"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die08.png" id="110"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die09.png" id="111"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback01.png" id="103"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback02.png" id="104"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback03.png" id="105"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback04.png" id="106"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback05.png" id="107"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback06.png" id="108"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die01.png" id="109"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die02.png" id="110"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die03.png" id="111"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die04.png" id="112"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die05.png" id="113"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die06.png" id="114"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die07.png" id="115"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die08.png" id="116"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die09.png" id="117"]
 
 [resource]
 animations = [{
@@ -621,8 +627,12 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("108")
-},
-{
+}],
+"loop": false,
+"name": &"faint",
+"speed": 12.0
+}, {
+"frames": [{
 "duration": 1.0,
 "texture": ExtResource("109")
 },
@@ -633,6 +643,30 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("111")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("112")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("113")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("114")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("115")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("116")
+},
+{
+"duration": 1.0,
+"texture": ExtResource("117")
 }],
 "loop": false,
 "name": &"die",

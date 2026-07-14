@@ -24,4 +24,5 @@ const GRAB := "grab"          # Hunter suppression hold
 const STRUGGLE := "struggle"  # Runner being suppressed
 const PUSH := "push"          # Hunter shoving during the mash-off
 const PULL := "pull"          # Runner heaving away during the mash-off
+const FAINT := "faint"        # Hunter dazed after a Runner escapes its grip
 const DIE := "die"            # Hunter killed

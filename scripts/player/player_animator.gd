@@ -71,10 +71,15 @@ func publish(delta: float) -> void:
 func _pick_anim(loco: String) -> String:
 	if body.dead:
 		return Anim.DIE
+	if body.fainted:
+		return Anim.FAINT             # dazed on the ground after losing the grip
+	if body.combat.pouncing:
+		return Anim.GRAB              # arms out, reaching through the pounce arc
 	if body.combat.grappling:
-		# The mash-off reads as a tug-of-war: the Runner heaves away (pull), the
-		# Hunter shoves in (push).
-		return Anim.PULL if body.role == Roles.RUNNER else Anim.PUSH
+		# The Hunter grabs and holds; the Runner struggles in its grip.
+		return Anim.STRUGGLE if body.role == Roles.RUNNER else Anim.GRAB
+	if body.combat.stiff_active():
+		return Anim.GRAB              # Hunter's grab lunge and its miss recovery
 	if body.movement.exit_stun_active():
 		return Anim.ROLL              # tunnel exit stiffness reads as a tumble-recovery
 	if _land_lock_left > 0.0:
@@ -83,18 +88,14 @@ func _pick_anim(loco: String) -> String:
 		return Anim.RUN_STOP
 	return loco
 
-## Point the sprite at the other fighter for the mash-off. The push sprite faces
-## right by default and the pull sprite faces left, so the two roles flip on
-## opposite conditions to end up facing each other.
+## Point the sprite at the other fighter for the mash-off. Both mash-off sprites
+## (Hunter push, Runner pull) reach toward the right by default, so both roles
+## face the opponent the same way: only flip when the opponent is to the left.
 func _face_opponent() -> void:
 	var other := _grapple_opponent()
 	if other == null:
 		return
-	var to_right := other.global_position.x > body.global_position.x
-	if body.role == Roles.RUNNER:
-		sprite.flip_h = to_right          # pull: default faces left -> flip to face a Hunter on the right
-	else:
-		sprite.flip_h = not to_right      # push: default faces right -> flip to face a Runner on the left
+	sprite.flip_h = other.global_position.x < body.global_position.x
 
 func _grapple_opponent() -> Node2D:
 	if body.gm == null:
@@ -122,6 +123,14 @@ func _apply_visual() -> void:
 	else:
 		sprite.modulate = Color(0.5, 0.32, 0.32) if body.dead else HUNTER_COL
 
+## Immediate feedback the instant a Hunter lunges for a grab: snap into the grab
+## reach from frame 0 and publish it so remote copies see the lunge right away.
+func lunge() -> void:
+	sprite.play(Anim.GRAB)
+	sprite.frame = 0
+	body.net_anim = Anim.GRAB
+	body.net_flip = sprite.flip_h
+
 ## Immediate feedback for a mash tap on the LOCAL player: replay the push/pull
 ## from the top so each key press lands a fresh, visible heave. Called from
 ## PlayerCombat the moment the mash key is pressed.
@@ -134,7 +143,7 @@ func pulse() -> void:
 ## the reliable, peer-agnostic tell, so this works the same on the owner and on
 ## remote copies.
 func _grappling() -> bool:
-	return sprite.animation == Anim.PUSH or sprite.animation == Anim.PULL
+	return sprite.animation == Anim.GRAB or sprite.animation == Anim.STRUGGLE
 
 ## Connect once to the GameManager so an opponent's tap (a bump in the replicated
 ## capture/escape bars) replays this player's heave too — so both fighters react.

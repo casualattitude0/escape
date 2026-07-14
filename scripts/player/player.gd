@@ -23,6 +23,7 @@ var net_anim: String = Anim.IDLE
 var net_flip: bool = false
 var capturable: bool = false     # Runner: currently vulnerable to a grab
 var dead: bool = false           # Hunter: killed, waiting to respawn
+var fainted: bool = false        # Hunter: dazed after a Runner escaped its grip
 
 # Set at spawn (world.gd); Hunters respawn here.
 var spawn_point: Vector2 = Vector2.ZERO
@@ -58,6 +59,19 @@ func _physics_process(delta: float) -> void:
 		animator.publish(delta)
 		return
 
+	# Dazed after a Runner broke our grip: hold still, no moving or grabbing.
+	if fainted:
+		combat.grappling = false   # drop the grapple pose so the faint anim shows
+		movement.freeze()
+		animator.publish(delta)
+		return
+
+	# Mid-pounce: custom airborne physics (leap toward the Runner, snag on contact).
+	if combat.pouncing:
+		combat.pounce_step(delta)
+		animator.publish(delta)
+		return
+
 	# Paused (local pause menu open): hold still but stay replicated.
 	if Net.local_input_locked:
 		movement.freeze()
@@ -66,7 +80,8 @@ func _physics_process(delta: float) -> void:
 
 	movement.update_tunnel(delta)
 	var grappling := combat.update_grapple()
-	var immobile := grappling or movement.exit_stun_active()
+	combat.tick_stiff(delta)
+	var immobile := grappling or combat.stiff_active() or movement.exit_stun_active()
 
 	movement.tick(delta, not immobile)
 	effects.camera_juice(delta)   # lookahead + landing shake: real velocity, owner only
@@ -77,10 +92,15 @@ func _physics_process(delta: float) -> void:
 		capturable = (gm != null and gm.carrying()) or movement.exit_stun_active() or movement.is_slow()
 
 	combat.apply_snap(delta)
-	combat.handle_input()
+	combat.handle_input(delta)
 	animator.publish(delta)
 
 @rpc("any_peer", "reliable")
 func kill() -> void:
 	# Called by the server on the hit Hunter's own peer.
 	health.kill()
+
+@rpc("any_peer", "reliable")
+func faint(duration: float) -> void:
+	# Called by the server on a grabbing Hunter's own peer after a Runner escapes.
+	health.faint(duration)

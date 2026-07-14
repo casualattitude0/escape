@@ -22,9 +22,10 @@ signal sound_heard(world_pos: Vector2, heard_near: bool)
 
 const MATCH_TIME := 90.0          # seconds; Hunters win when it hits 0 (GDD 3)
 const CAPTURE_STUN := 0.6         # Runner recovery after a capture / scatter
+const FAINT_TIME := 2.0           # Hunter dazed after a Runner breaks its grip
 const SCATTER_MIN_SEP := 6.0 * 32.0   # keep a scattered key clear of doors/Runner
 
-var capture_range := 110.0       # how close a Hunter must be to grab / mash
+var capture_range := 64.0        # how close a Hunter must be to grab / mash (~2 tiles)
 var sound_near_radius := 540.0   # Hunters within this of a noise see clearly;
                                  # farther ones only get a minimap ping
 
@@ -167,9 +168,20 @@ func runner_press() -> void:
 		return
 	if grapple.active:
 		if grapple.add_escape():
+			_faint_grabbers()  # the Runner wrenched free -> grabbers are left dazed
 			_broadcast(true)   # escaped -> grapple ended
 		else:
 			_broadcast(false)
+
+## Runner broke the grip: daze every Hunter that was in grabbing range so the
+## Runner gets a real getaway window. Runs each Hunter's faint on its own peer.
+func _faint_grabbers() -> void:
+	var runner := _find_runner()
+	if runner == null:
+		return
+	for c in _players.get_children():
+		if c.get("role") == Roles.HUNTER and not c.dead and _in_range(c, runner):
+			c.faint.rpc_id(c.get_multiplayer_authority(), FAINT_TIME)
 
 ## Capture bar filled. Not a win (GDD 4.1): scatter the key the Runner was
 ## carrying to a fresh spot, briefly stun, and reset the mash-off for next time.

@@ -33,6 +33,7 @@ ANIMS = [
     ("struggle", "Sprites/Combat/Stunned", "Stunned",         7, True,  10.0),  # Runner being suppressed
     ("push",     "Sprites/Push",           "Push",            8, True,  14.0),  # Hunter shoving during the mash-off
     ("pull",     "Sprites/Pull",           "Pull",            6, True,  14.0),  # Runner heaving away during the mash-off
+    ("faint",    "Sprites/Knockback",      "Knockback",       6, False, 12.0),  # Hunter dazed after a Runner escapes its grip
     ("die",      "Sprites/Die",            "Die",             9, False, 12.0),  # Hunter killed
 ]
 
