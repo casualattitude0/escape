@@ -24,9 +24,9 @@ func _ready() -> void:
 	if _gm != null:
 		_gm.state_changed.connect(_refresh)
 	role_label.text = "You are: Runner (escape)" if _my_role == Roles.RUNNER else "You are: Hunter (contain)"
-	role_label.modulate = Color(0.55, 0.85, 0.65) if _my_role == Roles.RUNNER else Color(0.9, 0.5, 0.5)
-	hint_label.text = "Move A/D   Jump Space   Slide Shift/S into tunnels   Attack F (kills Hunters)\nGrab a key, follow the arrow to a door — 3 keys in one door escapes. Beat the clock!" if _my_role == Roles.RUNNER \
-		else "Move A/D   Jump Space   Get close to a key-carrying Runner and MASH F to knock the key loose\nJust run out the clock. Vision is limited — noises clear your sight nearby, or ping the minimap"
+	role_label.modulate = Color(1, 0, 0)
+	hint_label.text = "A/D move · Space jump · Shift slide · F attack\nGrab keys → doors. 3 keys opens a door. Beat the clock!" if _my_role == Roles.RUNNER \
+		else "A/D move · Space jump\nMASH F near a key-carrier to knock it loose. Run out the clock."
 	_refresh()
 
 func _process(_delta: float) -> void:
@@ -34,7 +34,7 @@ func _process(_delta: float) -> void:
 		return
 	var s: int = _gm.time_seconds()
 	timer_label.text = "%d:%02d" % [s / 60, s % 60]
-	timer_label.modulate = Color(0.95, 0.4, 0.4) if s <= 15 else Color(1, 1, 1)
+	timer_label.modulate = Color(1, 0, 0)
 
 func _refresh() -> void:
 	if _gm == null:
@@ -44,13 +44,13 @@ func _refresh() -> void:
 	if _my_role == Roles.RUNNER:
 		if _gm.carrying():
 			items_label.text = "Key in hand — deliver it to a door  (best %d/%d)" % [best, per]
-			items_label.modulate = Color(1.0, 0.85, 0.4)
+			items_label.modulate = Color(1, 0, 0)
 		else:
 			items_label.text = "Grab a key  (best door %d/%d)" % [best, per]
-			items_label.modulate = Color(1, 1, 1)
+			items_label.modulate = Color(1, 0, 0)
 	else:
 		items_label.text = "Runner's best door: %d/%d" % [best, per]
-		items_label.modulate = Color(1, 1, 1)
+		items_label.modulate = Color(1, 0, 0)
 
 	var active: bool = _gm.grappling() and _gm.winner == ""
 	capture_bar.value = _gm.capture_ratio() * 100.0
@@ -63,10 +63,10 @@ func _refresh() -> void:
 		mash_prompt.visible = true
 		if _my_role == Roles.RUNNER:
 			mash_prompt.text = "GRABBED!  Mash F before the key drops!"
-			mash_prompt.modulate = Color(1, 0.85, 0.3)
+			mash_prompt.modulate = Color(1, 0, 0)
 		else:
 			mash_prompt.text = "Mash F to knock the key loose!"
-			mash_prompt.modulate = Color(0.6, 0.9, 1.0)
+			mash_prompt.modulate = Color(1, 0, 0)
 	else:
 		mash_prompt.visible = false
 
@@ -80,4 +80,4 @@ func _refresh() -> void:
 	else:
 		banner.text = "Time's up — the monster is contained!"
 	banner.text += "\n" + ("You win!" if won else "You lose")
-	banner.modulate = Color(0.6, 0.9, 0.6) if won else Color(0.9, 0.55, 0.55)
+	banner.modulate = Color(1, 0, 0)
