@@ -8,17 +8,21 @@ extends ColorRect
 ## Both roles are fogged, but the Runner sees more than the Hunter: a lighter
 ## overlay (RUNNER_DARKNESS) and a wider clear circle (RUNNER_RADIUS).
 ##
-## Sound exposure (GDD 4.3, Hunter only): when a nearby Runner makes noise, the
-## Hunter's clear radius briefly swells to spot the Runner, then eases back.
+## Spotting (Hunter only): while the Runner is inside the Hunter's clear circle,
+## the Hunter's vision swells to a wide "wild" radius and holds there; once the
+## Runner slips out of sight it lingers briefly, then eases back. Because the
+## detection uses the current radius, the swell is sticky (the Runner enters at
+## BASE_RADIUS but stays tracked out to WILD_RADIUS). Every radius change is
+## smoothed with half-life easing so it never snaps.
 
 const BASE_RADIUS := 175.0       # Hunter's normal clear circle (px)
 const RUNNER_RADIUS := 260.0     # Runner's clear circle (wider: better sight)
-const CLARITY_RADIUS := 400.0    # expanded circle right after a near noise (Hunter)
+const WILD_RADIUS := 400.0       # Hunter's expanded circle while the Runner is spotted
 const SOFTNESS := 110.0          # feathering of the fog edge (px)
 const DARKNESS := 0.92           # Hunter fog opacity outside the circle
 const RUNNER_DARKNESS := 0.95    # Runner fog opacity (lighter: still semi-sees)
-const CLARITY_TIME := 2.5        # how long the expanded radius holds (s)
-const EASE_SPEED := 900.0        # radius px/s toward its target
+const SPOT_LINGER := 2.5         # how long the wild radius holds after losing sight (s)
+const EASE_HALFLIFE := 0.18      # seconds to close half the gap to the target radius
 
 const SHADER_CODE := """
 shader_type canvas_item;
@@ -38,7 +42,7 @@ var _is_hunter := true
 var _base_radius := BASE_RADIUS
 var _darkness := DARKNESS
 var _radius := BASE_RADIUS
-var _clarity_left := 0.0
+var _spot_left := 0.0
 var _gm: Node
 var _local: Node2D
 var _mat: ShaderMaterial
@@ -57,19 +61,21 @@ func _ready() -> void:
 	_mat.shader = shader
 	material = _mat
 	_gm = get_tree().get_first_node_in_group("game_manager")
-	# Only the Hunter's view swells on nearby Runner noise (GDD 4.3).
-	if _is_hunter and _gm != null:
-		_gm.sound_heard.connect(_on_sound_heard)
 
 func _process(delta: float) -> void:
 	if _local == null or not is_instance_valid(_local):
 		_local = _find_local()
 		if _local == null:
 			return
-	if _clarity_left > 0.0:
-		_clarity_left -= delta
-	var target := CLARITY_RADIUS if _clarity_left > 0.0 else _base_radius
-	_radius = move_toward(_radius, target, EASE_SPEED * delta)
+	# Only the Hunter's view reacts to the Runner; the Runner keeps a steady circle.
+	if _is_hunter:
+		if _runner_in_view():
+			_spot_left = SPOT_LINGER       # spotted right now — refresh the hold
+		elif _spot_left > 0.0:
+			_spot_left -= delta            # lost sight — linger, then ease back
+	var target := WILD_RADIUS if _spot_left > 0.0 else _base_radius
+	# Half-life smoothing: frame-rate independent, eases in and never snaps.
+	_radius = lerp(target, _radius, pow(0.5, delta / EASE_HALFLIFE))
 	var center: Vector2 = get_viewport().get_canvas_transform() * _local.global_position
 	_mat.set_shader_parameter("center_px", center)
 	_mat.set_shader_parameter("resolution", get_viewport_rect().size)
@@ -77,9 +83,22 @@ func _process(delta: float) -> void:
 	_mat.set_shader_parameter("soft_px", SOFTNESS)
 	_mat.set_shader_parameter("darkness", _darkness)
 
-func _on_sound_heard(_pos: Vector2, heard_near: bool) -> void:
-	if heard_near:
-		_clarity_left = CLARITY_TIME
+## True when the Runner is inside the Hunter's current clear circle. Detecting
+## against the live radius (not BASE_RADIUS) makes the swell sticky: the Runner
+## enters at the narrow radius but stays tracked while within the widened one.
+func _runner_in_view() -> bool:
+	var runner := _find_runner()
+	if runner == null or not is_instance_valid(runner):
+		return false
+	return _local.global_position.distance_to(runner.global_position) <= _radius
+
+func _find_runner() -> Node2D:
+	if _gm == null:
+		return null
+	for c in _gm.players().get_children():
+		if c.get("role") == Roles.RUNNER:
+			return c
+	return null
 
 func _find_local() -> Node2D:
 	if _gm == null:
