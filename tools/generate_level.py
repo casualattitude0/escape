@@ -178,10 +178,10 @@ for y in range(H):
             count += 1
 b64 = base64.b64encode(bytes(buf)).decode()
 
-out = os.path.join(os.path.dirname(__file__), "..", "scenes", "level.tscn")
+out = os.path.join(os.path.dirname(__file__), "..", "scenes", "levels", "level.tscn")
 with open(out, "w") as f:
     f.write('[gd_scene format=4]\n\n')
-    f.write('[ext_resource type="TileSet" path="res://scenes/terrain_tileset.tres" id="1_2q6dc"]\n\n')
+    f.write('[ext_resource type="TileSet" path="res://scenes/resources/terrain_tileset.tres" id="1_2q6dc"]\n\n')
     f.write('[node name="Terrain" type="TileMapLayer" unique_id=322632070]\n')
     f.write(f'tile_map_data = PackedByteArray("{b64}")\n')
     f.write('tile_set = ExtResource("1_2q6dc")\n')

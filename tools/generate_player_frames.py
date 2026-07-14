@@ -67,7 +67,7 @@ def main():
         )
 
     load_steps = next_id  # one per ext_resource + the resource itself
-    out = os.path.join(ROOT, "scenes", "player_frames.tres")
+    out = os.path.join(ROOT, "scenes", "resources", "player_frames.tres")
     with open(out, "w") as f:
         f.write(f'[gd_resource type="SpriteFrames" load_steps={load_steps} format=3]\n\n')
         f.write("\n".join(ext_lines))

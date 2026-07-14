@@ -12,7 +12,7 @@ class_name PlayerEffects
 ## it reads real physics state, so it only ever runs on the owning peer, called
 ## separately from the physics path.
 
-const DUST_SCENE := preload("res://scenes/dust.tscn")
+const DUST_SCENE := preload("res://scenes/fx/dust.tscn")
 const FEET_OFFSET := Vector2(0, 20)  # local offset from body origin to ground contact (matches SpritePivot)
 
 ## -- Squash & stretch --------------------------------------------------------

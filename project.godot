@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Escape"
-run/main_scene="res://scenes/menu.tscn"
+run/main_scene="res://scenes/ui/menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
@@ -30,7 +30,7 @@ window/stretch/aspect="expand"
 
 [gui]
 
-theme/custom_font="res://scenes/ui_font.tres"
+theme/custom_font="res://scenes/resources/ui_font.tres"
 
 [input]
 

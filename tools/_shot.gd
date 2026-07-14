@@ -12,7 +12,7 @@ func _ready() -> void:
 	bg.modulate = Color(0.4, 0.43, 0.56)
 	var bgl := CanvasLayer.new(); bgl.layer = -1; add_child(bgl); bgl.add_child(bg)
 	# terrain
-	var lvl: Node = (load("res://scenes/level.tscn") as PackedScene).instantiate()
+	var lvl: Node = (load("res://scenes/levels/level.tscn") as PackedScene).instantiate()
 	add_child(lvl)
 	# camera over room A / B area (tiles ~ x30..68 y46..54 -> px)
 	var cam := Camera2D.new(); cam.position = Vector2(1500, 1600); cam.zoom = Vector2(1.4, 1.4)
