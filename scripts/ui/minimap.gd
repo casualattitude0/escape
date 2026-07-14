@@ -24,7 +24,9 @@ const COL_SELF := Color(0.45, 0.9, 0.55)
 const COL_TEAM := Color(0.55, 0.75, 1.0)
 const COL_PING := Color(1.0, 0.78, 0.25)
 const COL_DOOR_LOCKED := Color(0.85, 0.35, 0.35)
+const COL_DOOR_PARTIAL := Color(0.9, 0.75, 0.3)
 const COL_DOOR_OPEN := Color(0.35, 0.9, 0.45)
+const COL_KEY := Color(0.96, 0.83, 0.32)
 
 var _gm: Node
 var _players: Node
@@ -100,22 +102,27 @@ func _draw() -> void:
 ## Runner view: objectives (uncollected objects, escape doors) plus own marker.
 func _draw_runner() -> void:
 	var pulse := 0.5 + 0.5 * sin(_time * 5.0)
-	if _doors_root != null:
-		var open: bool = _gm != null and _gm.items_collected() >= _gm.items_total()
+	if _doors_root != null and _gm != null:
+		var per: int = _gm.per_door()
 		for d in _doors_root.get_children():
 			if d is Node2D:
-				var col := COL_DOOR_OPEN if open else COL_DOOR_LOCKED
+				var installed: int = _gm.door_installs(d.index)
+				var col := COL_DOOR_LOCKED
+				if installed >= per:
+					col = COL_DOOR_OPEN
+				elif installed > 0:
+					col = COL_DOOR_PARTIAL
 				var at := _world_to_map(d.global_position)
 				var s := 5.0
 				draw_rect(Rect2(at - Vector2(s, s), Vector2(s, s) * 2.0), col)
-				if open:
+				if installed >= per:
 					draw_rect(Rect2(at - Vector2(s, s), Vector2(s, s) * 2.0), col.lightened(0.4), false, 1.5)
 	if _items_root != null:
 		for it in _items_root.get_children():
-			# Collecting an object hides it on every peer (Item._hide); a hidden
-			# pickup is already grabbed, so it drops off the objective map.
+			# Carrying/installing a key hides it on every peer (Item.set_held); a
+			# hidden key is in hand or already delivered, so it drops off the map.
 			if it is Node2D and it.visible:
-				var col := _item_color(it)
+				var col := COL_KEY
 				var at := _world_to_map(it.global_position)
 				draw_circle(at, lerp(2.5, 4.5, pulse), col)
 				draw_arc(at, 6.0, 0.0, TAU, 20, Color(col.r, col.g, col.b, 0.5 * (1.0 - pulse)), 1.5)
@@ -123,12 +130,6 @@ func _draw_runner() -> void:
 		for c in _players.get_children():
 			if c.name == _me:
 				draw_circle(_world_to_map(c.global_position), 4.0, COL_SELF)
-
-func _item_color(it: Node) -> Color:
-	var fill := it.get_node_or_null("Fill")
-	if fill != null and fill.get("color") != null:
-		return fill.color
-	return Color(0.9, 0.85, 0.4)
 
 ## Hunter view: teammate positions plus fading Runner sound pings.
 func _draw_hunter() -> void:

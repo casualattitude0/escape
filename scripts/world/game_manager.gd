@@ -1,12 +1,17 @@
 extends Node
 
 ## Server-authoritative match coordinator and the rpc facade the rest of the
-## game talks to. Runs its logic only on the host (peer 1). It owns the winner
-## and the replication, and delegates the details to its child systems:
-##   * $ItemSystem   — key-object collection
+## game talks to. Runs its logic only on the host (peer 1). It owns the winner,
+## the match clock, and the replication, delegating details to its children:
+##   * $ItemSystem   — escape progress (carrying + per-door key installs)
 ##   * $GrappleSystem — the capture mash-off
-## Players, items and the door reach this node via the "game_manager" group and
-## call its facade methods / rpcs; they never touch the subsystems directly.
+## Players, keys and doors reach this node via the "game_manager" group and call
+## its facade methods / rpcs; they never touch the subsystems directly.
+##
+## Win conditions (GDD 3 / 4.1):
+##   * Runner escapes by installing PER_DOOR keys into ANY one door.
+##   * Hunters win by running out the MATCH_TIME clock. Capturing the Runner is
+##     NOT a win — it scatters the key the Runner was carrying and buys time.
 
 signal state_changed
 # Fired on every peer when the Runner makes a noise (GDD 4.3). `heard_near` is
@@ -15,21 +20,32 @@ signal state_changed
 # ping. The Runner peer ignores it (no Hunter UI).
 signal sound_heard(world_pos: Vector2, heard_near: bool)
 
+const MATCH_TIME := 90.0          # seconds; Hunters win when it hits 0 (GDD 3)
+const CAPTURE_STUN := 0.6         # Runner recovery after a capture / scatter
+const SCATTER_MIN_SEP := 6.0 * 32.0   # keep a scattered key clear of doors/Runner
+
 var capture_range := 110.0       # how close a Hunter must be to grab / mash
 var sound_near_radius := 540.0   # Hunters within this of a noise see clearly;
                                  # farther ones only get a minimap ping
 
 var winner := ""                 # "", Roles.WIN_RUNNER, Roles.WIN_HUNTERS
+var time_left := MATCH_TIME
 
 @onready var items: ItemSystem = $ItemSystem
 @onready var grapple: GrappleSystem = $GrappleSystem
 @onready var _players: Node = get_node("../Players")
+@onready var _items_root: Node = get_node("../Items")
+@onready var _doors_root: Node = get_node("../Doors")
+@onready var _terrain: TileMapLayer = get_node("../Terrain")
+
+var _carried_index := -1         # which key node the Runner is carrying (-1 = none)
+var _sync_accum := 0.0           # cadence for periodic (clock) fast syncs
 
 func _ready() -> void:
 	add_to_group("game_manager")
 	set_physics_process(multiplayer.is_server())
 
-# ---- read facade (HUD / players) ------------------------------------------
+# ---- read facade (HUD / players / doors) ----------------------------------
 
 func grappling() -> bool:
 	return grapple.active
@@ -37,11 +53,26 @@ func grappling() -> bool:
 func players() -> Node:
 	return _players
 
-func items_collected() -> int:
-	return items.collected
+func doors() -> Node:
+	return _doors_root
 
-func items_total() -> int:
-	return items.total
+func carrying() -> bool:
+	return items.carrying
+
+func per_door() -> int:
+	return ItemSystem.PER_DOOR
+
+func door_installs(idx: int) -> int:
+	return items.door_installs(idx)
+
+func best_progress() -> int:
+	return items.best_progress()
+
+func time_ratio() -> float:
+	return time_left / MATCH_TIME
+
+func time_seconds() -> int:
+	return int(ceil(time_left))
 
 func capture_ratio() -> float:
 	return grapple.cap
@@ -49,25 +80,48 @@ func capture_ratio() -> float:
 func escape_ratio() -> float:
 	return grapple.esc
 
-# ---- items / escape (called on the server by Item / EscapeDoor) -----------
+# ---- keys / doors (called on the server by Item / EscapeDoor) --------------
 
-func collect_item() -> void:
-	if not multiplayer.is_server():
-		return
-	items.collect()
-	_broadcast(true)
-
-func try_escape() -> void:
+## Runner touched key `idx`. Picks it up if hands are free — carrying is the
+## Runner's main exposed window (GDD 4.1).
+func try_pickup(idx: int) -> void:
 	if not multiplayer.is_server() or winner != "":
 		return
-	if items.all_collected():
+	if items.carrying or grapple.active:
+		return
+	items.carrying = true
+	_carried_index = idx
+	var it: Node = _items_root.get_node_or_null("Item%d" % idx)
+	if it != null:
+		it.set_held.rpc(true)
+	var runner := _find_runner()
+	if runner != null:
+		emit_sound(runner.global_position)   # grabbing a key is noisy (4.3)
+	_broadcast(true)
+
+## Runner touched door `idx` while carrying. Installs the key; the last one wins.
+func try_install(idx: int) -> void:
+	if not multiplayer.is_server() or winner != "" or not items.carrying:
+		return
+	var it: Node = _items_root.get_node_or_null("Item%d" % _carried_index)
+	if it != null:
+		it.set_held.rpc(true)      # consumed: stays hidden
+	items.carrying = false
+	_carried_index = -1
+	var n := items.install(idx)
+	var runner := _find_runner()
+	if runner != null:
+		emit_sound(runner.global_position)
+	if n >= ItemSystem.PER_DOOR:
 		_set_winner(Roles.WIN_RUNNER)
+	else:
+		_broadcast(true)
 
 # ---- sound exposure (GDD 4.3) --------------------------------------------
 
 ## Called on the server when the Runner does something noisy (slides a tunnel,
-## grabs an item, ...). Splits Hunters into "near" (get a vision-clarity boost)
-## and "far" (get a minimap ping), then relays to every peer.
+## grabs / installs a key, ...). Splits Hunters into "near" (get a vision-clarity
+## boost) and "far" (get a minimap ping), then relays to every peer.
 func emit_sound(world_pos: Vector2) -> void:
 	if not multiplayer.is_server() or winner != "":
 		return
@@ -97,13 +151,13 @@ func hunter_press() -> void:
 	if not _in_range(h, runner):
 		return
 	if not grapple.active:
-		# Start a grapple: only a capturable (slowed / cornered) Runner can be grabbed.
+		# Start a grapple: only a capturable (carrying / cornered) Runner can be grabbed.
 		if grapple.on_cooldown() or not runner.capturable:
 			return
 		grapple.start()
 		_broadcast(true)
 	elif grapple.add_capture():
-		_set_winner(Roles.WIN_HUNTERS)
+		_on_capture_full()
 	else:
 		_broadcast(false)
 
@@ -117,19 +171,59 @@ func runner_press() -> void:
 		else:
 			_broadcast(false)
 
+## Capture bar filled. Not a win (GDD 4.1): scatter the key the Runner was
+## carrying to a fresh spot, briefly stun, and reset the mash-off for next time.
+func _on_capture_full() -> void:
+	var runner := _find_runner()
+	if items.carrying and _carried_index >= 0:
+		items.carrying = false
+		var it: Node = _items_root.get_node_or_null("Item%d" % _carried_index)
+		if it != null:
+			it.place.rpc(_scatter_spot())
+		_carried_index = -1
+	grapple.reset()
+	if runner != null:
+		# Host == Runner, so the recovery stun can be applied directly.
+		runner.movement.exit_stun_left = maxf(runner.movement.exit_stun_left, CAPTURE_STUN)
+	_broadcast(true)
+
+## A random standable world point clear of the doors and the Runner.
+func _scatter_spot() -> Vector2:
+	var runner := _find_runner()
+	var avoid: Array = []
+	if runner != null:
+		avoid.append(runner.global_position)
+	for d in _doors_root.get_children():
+		if d is Node2D:
+			avoid.append(d.global_position)
+	if _terrain != null:
+		var layout := LevelLayout.new(_terrain)
+		var spot: Variant = layout.random_floor(avoid, SCATTER_MIN_SEP)
+		if spot != null:
+			return spot
+	return (runner.global_position if runner != null else Vector2.ZERO) + Vector2(0, -8)
+
 # ---- per-frame upkeep -----------------------------------------------------
 
 func _physics_process(delta: float) -> void:
 	if winner != "":
 		return
+	# Match clock: Hunters win if it runs out (GDD 3).
+	time_left = maxf(0.0, time_left - delta)
+	if time_left <= 0.0:
+		_set_winner(Roles.WIN_HUNTERS)
+		return
 	grapple.tick_cooldown(delta)
 	var runner := _find_runner()
-	if runner == null:
-		return
-	if grapple.active:
+	if runner != null and grapple.active:
 		grapple.decay(delta)
 		if not _any_hunter_in_range(runner):
 			grapple.end(false)
+		_broadcast(false)
+	# Keep the clock (and any drift) in sync a couple times a second.
+	_sync_accum += delta
+	if _sync_accum >= 0.5:
+		_sync_accum = 0.0
 		_broadcast(false)
 
 # ---- helpers --------------------------------------------------------------
@@ -163,7 +257,10 @@ func _set_winner(w: String) -> void:
 
 func snapshot_state() -> Dictionary:
 	return {
-		"items_collected": items.collected,
+		"installs": items.installs.duplicate(),
+		"carrying": items.carrying,
+		"carried_index": _carried_index,
+		"time": time_left,
 		"winner": winner,
 		"cap": grapple.cap,
 		"esc": grapple.esc,
@@ -172,7 +269,10 @@ func snapshot_state() -> Dictionary:
 	}
 
 func restore_state(d: Dictionary) -> void:
-	items.collected = int(d.get("items_collected", 0))
+	items.installs = (d.get("installs", {}) as Dictionary).duplicate()
+	items.carrying = bool(d.get("carrying", false))
+	_carried_index = int(d.get("carried_index", -1))
+	time_left = float(d.get("time", MATCH_TIME))
 	winner = str(d.get("winner", ""))
 	grapple.cap = float(d.get("cap", 0.0))
 	grapple.esc = float(d.get("esc", 0.0))
@@ -180,27 +280,39 @@ func restore_state(d: Dictionary) -> void:
 	grapple.active = bool(d.get("active", false))
 	_broadcast(true)   # push the restored state to every peer's HUD
 
+func _state_dict() -> Dictionary:
+	return {
+		"installs": items.installs,
+		"carrying": items.carrying,
+		"time": time_left,
+		"cap": grapple.cap,
+		"esc": grapple.esc,
+		"active": grapple.active,
+		"winner": winner,
+	}
+
+func _apply_state(d: Dictionary) -> void:
+	items.installs = d.get("installs", {})
+	items.carrying = bool(d.get("carrying", false))
+	time_left = float(d.get("time", MATCH_TIME))
+	grapple.cap = float(d.get("cap", 0.0))
+	grapple.esc = float(d.get("esc", 0.0))
+	grapple.active = bool(d.get("active", false))
+	winner = str(d.get("winner", ""))
+	state_changed.emit()
+
 func _broadcast(reliable: bool) -> void:
 	if reliable:
-		_sync_state.rpc(items.collected, grapple.cap, grapple.esc, grapple.active, winner)
+		_sync_state.rpc(_state_dict())
 	else:
-		_sync_state_fast.rpc(items.collected, grapple.cap, grapple.esc, grapple.active)
+		_sync_state_fast.rpc(_state_dict())
 
 @rpc("authority", "call_local", "reliable")
-func _sync_state(item_count: int, c: float, e: float, g: bool, w: String) -> void:
-	items.collected = item_count
-	grapple.cap = c
-	grapple.esc = e
-	grapple.active = g
-	winner = w
-	state_changed.emit()
+func _sync_state(d: Dictionary) -> void:
+	_apply_state(d)
 
 @rpc("authority", "call_local", "unreliable")
-func _sync_state_fast(item_count: int, c: float, e: float, g: bool) -> void:
+func _sync_state_fast(d: Dictionary) -> void:
 	if winner != "":
 		return
-	items.collected = item_count
-	grapple.cap = c
-	grapple.esc = e
-	grapple.active = g
-	state_changed.emit()
+	_apply_state(d)

@@ -8,12 +8,11 @@ class_name GrappleSystem
 ##   * ESCAPE (`esc`) — the Runner fills it; each Runner tap is worth 2x
 ##     (ESC_STEP = 2 * CAP_STEP). Full = broke free.
 ## The GameManager drives this: start() / add_capture() / add_escape() on taps,
-## decay() each frame, and reads `cap`/`esc`/`active` for replication.
+## and reads `cap`/`esc`/`active` for replication. Neither bar decays over time —
+## progress is only ever gained by taps (and the ratchet floor).
 
 const CAP_STEP := 0.045          # capture bar gained per Hunter tap
 const ESC_STEP := 0.090          # escape bar gained per Runner tap (2x)
-const CAP_DECAY := 0.16          # capture bar lost per second (down to floor)
-const ESC_DECAY := 0.28          # escape bar lost per second (down to 0)
 const GRAB_COOLDOWN := 1.5       # after an escape, no re-grab for a moment
 const CHECKPOINTS := [0.3333, 0.6667]
 
@@ -65,3 +64,12 @@ func end(escaped: bool) -> void:
 
 func force_end() -> void:
 	active = false
+
+## Wipe the whole mash-off (both bars + the ratchet). Called after a capture
+## scatters the key, so the next carry-run is a fresh contest (GDD 4.5).
+func reset() -> void:
+	active = false
+	cap = 0.0
+	esc = 0.0
+	cap_floor = 0.0
+	_cd = GRAB_COOLDOWN

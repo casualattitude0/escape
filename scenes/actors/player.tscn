@@ -1,7 +1,8 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player.gd" id="1"]
-[ext_resource type="SpriteFrames" path="res://scenes/player_frames.tres" id="2"]
+[ext_resource type="SpriteFrames" path="res://scenes/resources/player_frames.tres" id="2"]
+[ext_resource type="Texture2D" path="res://sprites/items/item_0690.tres" id="8"]
 [ext_resource type="Script" path="res://scripts/player/player_movement.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/player/player_combat.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/player/player_health.gd" id="5"]
@@ -61,6 +62,12 @@ disabled = true
 position = Vector2(0, 20)
 target_position = Vector2(0, -50)
 collision_mask = 1
+
+[node name="CarrySprite" type="Sprite2D" parent="."]
+visible = false
+position = Vector2(0, -70)
+scale = Vector2(1.8, 1.8)
+texture = ExtResource("8")
 
 [node name="NameTag" type="Label" parent="."]
 offset_left = -60.0

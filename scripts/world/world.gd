@@ -3,9 +3,9 @@ extends Node2D
 ## Spawns the players once everyone has loaded the world, then hands off to the
 ## GameManager for the actual match. The host is the Runner; joiners are Hunters.
 
-const PLAYER := preload("res://scenes/player.tscn")
-const ITEM := preload("res://scenes/item.tscn")
-const DOOR := preload("res://scenes/escape_door.tscn")
+const PLAYER := preload("res://scenes/actors/player.tscn")
+const ITEM := preload("res://scenes/actors/item.tscn")
+const DOOR := preload("res://scenes/actors/escape_door.tscn")
 
 const RUNNER_SPAWN := Vector2(208, 1690)
 const HUNTER_SPAWNS := [
@@ -15,12 +15,9 @@ const HUNTER_SPAWNS := [
 	Vector2(1950, 1650),
 ]
 
-# Distinct colours for the x / y / z key objects.
-const ITEM_COLORS := [
-	Color(0.95, 0.85, 0.25),
-	Color(0.3, 0.85, 0.9),
-	Color(0.85, 0.4, 0.9),
-]
+# Keys are interchangeable now (GDD 4.1), so they share one colour.
+const KEY_COLOR := Color(0.95, 0.82, 0.25)
+const DOOR_COUNT := 3
 
 @onready var spawner: MultiplayerSpawner = $MultiplayerSpawner
 @onready var players_root: Node = $Players
@@ -116,27 +113,25 @@ func rejoin_new_peer() -> void:
 func _build_layout(layout_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = layout_seed
-	var hunters := 0
-	for id in Net.players:
-		if Net.players[id] == Roles.HUNTER:
-			hunters += 1
-	var door_count: int = hunters + 1              # GDD 4.1: always one more than Hunters
-	var item_count: int = get_tree().get_first_node_in_group("game_manager").items_total()
+	# Fixed 3 doors + 3 interchangeable keys (GDD 4.1); complete any one door.
+	var item_count := ItemSystem.KEYS_TOTAL
 
 	var layout := LevelLayout.new(terrain)
-	var plan := layout.generate(item_count, door_count, rng, RUNNER_SPAWN)
+	var plan := layout.generate(item_count, DOOR_COUNT, rng, RUNNER_SPAWN)
 
 	var item_spots: Array = plan["items"]
 	var door_spots: Array = plan["doors"]
 	for i in item_spots.size():
 		var item := ITEM.instantiate()
 		item.name = "Item%d" % i
+		item.index = i
 		item.position = item_spots[i]
-		item.get_node("Fill").color = ITEM_COLORS[i % ITEM_COLORS.size()]
+		item.get_node("Fill").color = KEY_COLOR
 		items_root.add_child(item)
 	for i in door_spots.size():
 		var door := DOOR.instantiate()
 		door.name = "Door%d" % i
+		door.index = i
 		door.position = door_spots[i]
 		doors_root.add_child(door)
 
@@ -199,10 +194,16 @@ func _resume_point(id: int, role: String) -> Variant:
 ## items, restores match state, then starts the periodic autosave.
 func _after_layout() -> void:
 	if not _resume.is_empty():
-		for item_name in _resume.get("hidden_items", []):
-			var item := items_root.get_node_or_null(str(item_name))
-			if item != null:
-				item._hide.rpc()
+		# Re-apply each key's live state: held (carried/installed -> hidden) or its
+		# last world position (available or scattered).
+		for st in _resume.get("key_states", []):
+			var item := items_root.get_node_or_null(str(st.get("name", "")))
+			if item == null:
+				continue
+			if bool(st.get("held", false)):
+				item.set_held.rpc(true)
+			else:
+				item.place.rpc(st.get("pos", item.position))
 		var gm := get_tree().get_first_node_in_group("game_manager")
 		if gm != null:
 			gm.restore_state(_resume.get("gm", {}))
@@ -225,10 +226,13 @@ func _build_snapshot() -> Dictionary:
 	var gm := get_tree().get_first_node_in_group("game_manager")
 	if gm == null:
 		return {}
-	var hidden := PackedStringArray()
+	var key_states: Array = []
 	for item in items_root.get_children():
-		if item.get("_collected"):
-			hidden.append(item.name)
+		key_states.append({
+			"name": item.name,
+			"pos": item.position,
+			"held": bool(item.get("_held")),
+		})
 	var runner_pos: Variant = null
 	var hunter_pos: Array = []
 	for c in players_root.get_children():
@@ -243,7 +247,7 @@ func _build_snapshot() -> Dictionary:
 				hunter_pos[idx] = c.global_position
 	return {
 		"seed": _active_seed,
-		"hidden_items": hidden,
+		"key_states": key_states,
 		"runner_pos": runner_pos,
 		"hunter_pos": hunter_pos,
 		"gm": gm.snapshot_state(),

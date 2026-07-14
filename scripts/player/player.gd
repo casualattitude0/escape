@@ -9,6 +9,7 @@ extends CharacterBody2D
 ## melee. Hunter (the researcher) walks only and captures via the mash-off.
 
 @onready var sprite: AnimatedSprite2D = $SpritePivot/AnimatedSprite2D
+@onready var carry_sprite: Sprite2D = $CarrySprite
 @onready var camera: Camera2D = $Camera2D
 @onready var movement: PlayerMovement = $Movement
 @onready var combat: PlayerCombat = $Combat
@@ -33,11 +34,19 @@ func _ready() -> void:
 	camera.enabled = is_multiplayer_authority()
 	if is_multiplayer_authority():
 		camera.make_current()
+	# Throttle replication to ~22Hz instead of once per physics frame. The default
+	# (interval 0) sends position every tick, which floods the (high-latency) relay
+	# and makes packets queue up; 0.045s is plenty smooth for this game and cuts the
+	# outbound packet rate to roughly a third. See net.gd for the relay path.
+	$Sync.replication_interval = 0.045
+	$Sync.delta_interval = 0.045
 	gm = get_tree().get_first_node_in_group("game_manager")
 
 func _process(delta: float) -> void:
 	animator.render()
 	effects.render(delta)   # squash/stretch + dust: every peer, keyed off net_anim/net_flip
+	# The Runner shows the key it's ferrying (replicated carry state, every peer).
+	carry_sprite.visible = role == Roles.RUNNER and gm != null and gm.carrying()
 
 func _physics_process(delta: float) -> void:
 	if not is_multiplayer_authority():
@@ -63,7 +72,9 @@ func _physics_process(delta: float) -> void:
 	effects.camera_juice(delta)   # lookahead + landing shake: real velocity, owner only
 
 	if role == Roles.RUNNER:
-		capturable = movement.exit_stun_active() or movement.is_slow()
+		# Carrying a key is the Runner's main exposed window (GDD 4.1); the tunnel
+		# exit and standing still stay as minor windows.
+		capturable = (gm != null and gm.carrying()) or movement.exit_stun_active() or movement.is_slow()
 
 	combat.apply_snap(delta)
 	combat.handle_input()

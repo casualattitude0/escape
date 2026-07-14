@@ -102,6 +102,23 @@ func _scatter(count: int, room_order: Array, rng: RandomNumberGenerator, chosen:
 				break
 	return out
 
+## A random standable world point at least `min_sep` from every point in `avoid`.
+## Server-side scatter target for a captured key (see GameManager); non-random
+## result is fine to replicate. Returns null if nothing qualifies.
+func random_floor(avoid: Array, min_sep: float) -> Variant:
+	var cells: Array = []
+	for room in cells_by_room:
+		cells.append_array(cells_by_room[room])
+	if cells.is_empty():
+		return null
+	var rng := RandomNumberGenerator.new()
+	rng.randomize()
+	for _attempt in 200:
+		var p := floor_world(cells[rng.randi() % cells.size()])
+		if _clear(p, avoid, min_sep):
+			return p
+	return null
+
 func _clear(p: Vector2, others: Array, sep: float) -> bool:
 	for o in others:
 		if p.distance_to(o) < sep:
