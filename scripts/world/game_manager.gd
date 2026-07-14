@@ -216,7 +216,6 @@ func _physics_process(delta: float) -> void:
 	grapple.tick_cooldown(delta)
 	var runner := _find_runner()
 	if runner != null and grapple.active:
-		grapple.decay(delta)
 		if not _any_hunter_in_range(runner):
 			grapple.end(false)
 		_broadcast(false)

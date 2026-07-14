@@ -51,10 +51,6 @@ func add_escape() -> bool:
 		return true
 	return false
 
-func decay(delta: float) -> void:
-	cap = maxf(cap_floor, cap - CAP_DECAY * delta)
-	esc = maxf(0.0, esc - ESC_DECAY * delta)
-
 func end(escaped: bool) -> void:
 	active = false
 	esc = 0.0
