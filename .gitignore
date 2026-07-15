@@ -2,6 +2,12 @@
 .godot/
 /android/
 
+# Scenes live in scenes/{actors,levels,resources,fx,ui}/ only — never at the root.
+# Root copies were committed twice by mistake and shadowed the real ones (see CLAUDE.md).
+# Use `git add -f` if you ever genuinely need a scene here.
+/scenes/*.tscn
+/scenes/*.tres
+
 # Python tooling
 __pycache__/
 *.pyc
