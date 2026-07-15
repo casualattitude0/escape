@@ -1,0 +1,94 @@
+extends Node
+class_name KnockSystem
+
+## The knock-to-stun state (server-authoritative; owned by the GameManager).
+##
+## Hunters cannot kill the Runner — knocking it is their only verb, and it buys
+## time rather than winning (GDD 4.6). Three knocks stun it; every knock opens an
+## invulnerability window and kicks it away from whatever it was breaking.
+##
+## The three knobs that decide whether a lone Hunter can hold the Runner (GDD 7):
+##   * IFRAME_TIME  — the gap nobody can knock through. Note it is global to the
+##     Runner, not per-Hunter: a second Hunter cannot knock inside it either, so
+##     piling on more Hunters does not stun any faster. What extra Hunters buy is
+##     coverage — more angles the Runner has to break away from.
+##   * KNOCK_DECAY  — knocks are not banked. Without decay one Hunter could chip
+##     away across a whole match and still land a stun, which is exactly the
+##     "单人拖不住" rule the design wants to hold.
+##   * STUN_TIME    — how much of the Runner's clock a full stun burns.
+##
+## Deliberately NOT a ratchet: the old grapple saved capture progress at
+## checkpoints. Decay replaces that — progress is meant to be lost.
+
+const KNOCKS_TO_STUN := 3
+const IFRAME_TIME := 1.20        # invulnerable for this long after each knock
+const KNOCK_DECAY := 4.0         # no new knock for this long -> the count resets
+const STUN_TIME := 2.50          # how long a stunned Runner is frozen
+const KNOCK_RANGE := 64.0        # how close a Hunter must be to knock (~2 tiles)
+const KNOCKBACK_VX := 320.0      # horizontal kick, aimed along the knocker's facing
+
+var knocks := 0                  # 0..KNOCKS_TO_STUN-1 (a full count stuns and resets)
+var iframe_left := 0.0
+var decay_left := 0.0
+var stun_left := 0.0
+
+## Advance the timers. Returns true only when a DISCRETE change landed that the
+## clients need told about promptly — a window closing or the count going cold.
+##
+## Deliberately not "true whenever a timer moved": the clients read these as
+## booleans (stunned / invulnerable) and a count, so syncing a decrementing float
+## every physics frame would push 60 packets a second down a relay that the rest
+## of the game throttles to ~22Hz (see $Sync in player.gd). The half-second
+## heartbeat in the GameManager covers any drift in between.
+func tick(delta: float) -> bool:
+	var changed := false
+	if iframe_left > 0.0:
+		iframe_left = maxf(0.0, iframe_left - delta)
+		changed = changed or iframe_left <= 0.0     # window closed: knocks land again
+	if stun_left > 0.0:
+		stun_left = maxf(0.0, stun_left - delta)
+		changed = changed or stun_left <= 0.0       # the Runner is free again
+	if decay_left > 0.0:
+		decay_left = maxf(0.0, decay_left - delta)
+		if decay_left <= 0.0 and knocks > 0:
+			knocks = 0           # went cold: the Hunters have to start over
+			changed = true
+	return changed
+
+func stunned() -> bool:
+	return stun_left > 0.0
+
+func invulnerable() -> bool:
+	return iframe_left > 0.0
+
+func knock_ratio() -> float:
+	return float(knocks) / float(KNOCKS_TO_STUN)
+
+## Server-side gate for one Hunter's tap: the Runner must be neither stunned nor
+## inside an invulnerability window.
+##
+## This doubles as the rate limit, so there is no separate one. Every accepted
+## knock opens an IFRAME_TIME window and this rejects everything inside it, so
+## two knocks can never land closer together than that — a client mashing the key
+## (or a hacked one spamming the rpc) gains exactly nothing.
+func can_knock() -> bool:
+	return stun_left <= 0.0 and iframe_left <= 0.0
+
+## Land one knock. Returns true when this was the third (the Runner is stunned).
+func add_knock() -> bool:
+	knocks += 1
+	iframe_left = IFRAME_TIME
+	decay_left = KNOCK_DECAY
+	if knocks >= KNOCKS_TO_STUN:
+		knocks = 0
+		decay_left = 0.0
+		stun_left = STUN_TIME
+		return true
+	return false
+
+## Wipe everything (round over / restore).
+func force_end() -> void:
+	knocks = 0
+	iframe_left = 0.0
+	decay_left = 0.0
+	stun_left = 0.0

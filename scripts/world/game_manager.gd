@@ -1,17 +1,19 @@
 extends Node
+class_name GameManager
 
 ## Server-authoritative match coordinator and the rpc facade the rest of the
 ## game talks to. Runs its logic only on the host (peer 1). It owns the winner,
 ## the match clock, and the replication, delegating details to its children:
-##   * $ItemSystem   — escape progress (carrying + per-door key installs)
-##   * $GrappleSystem — the capture mash-off
-## Players, keys and doors reach this node via the "game_manager" group and call
-## its facade methods / rpcs; they never touch the subsystems directly.
+##   * $DeviceSystem — sabotage progress (GDD 4.1)
+##   * $KnockSystem  — the knock-to-stun state (GDD 4.6)
+## Players, devices and the escape point reach this node via the "game_manager"
+## group and call its facade methods / rpcs; they never touch the subsystems.
 ##
-## Win conditions (GDD 3 / 4.1):
-##   * Runner escapes by installing PER_DOOR keys into ANY one door.
-##   * Hunters win by running out the MATCH_TIME clock. Capturing the Runner is
-##     NOT a win — it scatters the key the Runner was carrying and buys time.
+## Win conditions (GDD 3):
+##   * Runner breaks every device, then reaches the escape point.
+##   * Hunters win by running out the MATCH_TIME clock. Stunning the Runner is
+##     NOT a win — it burns the Runner's clock and buys the Hunters time. They
+##     cannot kill it at all; delay is the whole offence.
 
 signal state_changed
 # Fired on every peer when the Runner makes a noise (GDD 4.3). `heard_near` is
@@ -21,53 +23,65 @@ signal state_changed
 signal sound_heard(world_pos: Vector2, heard_near: bool)
 
 const MATCH_TIME := 90.0          # seconds; Hunters win when it hits 0 (GDD 3)
-const CAPTURE_STUN := 0.6         # Runner recovery after a capture / scatter
-const FAINT_TIME := 2.0           # Hunter dazed after a Runner breaks its grip
-const SCATTER_MIN_SEP := 6.0 * 32.0   # keep a scattered key clear of doors/Runner
+# Mashing is noisy, but a ping per tap would be a siren. Fire one every few
+# accepted hits instead: ~4 tells per device. Counted in hits, not in fractions
+# of progress, so there is no float boundary to land wrong side of.
+const SOUND_EVERY_HITS := 3
 
-var capture_range := 64.0        # how close a Hunter must be to grab / mash (~2 tiles)
 var sound_near_radius := 540.0   # Hunters within this of a noise see clearly;
                                  # farther ones only get a minimap ping
 
 var winner := ""                 # "", Roles.WIN_RUNNER, Roles.WIN_HUNTERS
 var time_left := MATCH_TIME
 
-@onready var items: ItemSystem = $ItemSystem
-@onready var grapple: GrappleSystem = $GrappleSystem
+@onready var devices: DeviceSystem = $DeviceSystem
+@onready var knock: KnockSystem = $KnockSystem
 @onready var _players: Node = get_node("../Players")
-@onready var _items_root: Node = get_node("../Items")
-@onready var _doors_root: Node = get_node("../Doors")
+@onready var _devices_root: Node = get_node("../Devices")
+@onready var _escape_root: Node = get_node("../Escape")
 @onready var _terrain: TileMapLayer = get_node("../Terrain")
 
-var _carried_index := -1         # which key node the Runner is carrying (-1 = none)
 var _sync_accum := 0.0           # cadence for periodic (clock) fast syncs
+var _last_sound_slice := {}      # device index -> last progress slice that made noise
+# Server's copy of the Runner's kill cooldown. Ticked off physics delta rather
+# than wall clock so it obeys the same clock as everything else here, and held on
+# the server so a client cannot shorten it. There is only ever one Runner.
+var _attack_cd_left := 0.0
 
 func _ready() -> void:
 	add_to_group("game_manager")
 	set_physics_process(multiplayer.is_server())
 
-# ---- read facade (HUD / players / doors) ----------------------------------
-
-func grappling() -> bool:
-	return grapple.active
+# ---- read facade (HUD / players / devices / escape) ------------------------
 
 func players() -> Node:
 	return _players
 
-func doors() -> Node:
-	return _doors_root
+func devices_root() -> Node:
+	return _devices_root
 
-func carrying() -> bool:
-	return items.carrying
+func escape_root() -> Node:
+	return _escape_root
 
-func per_door() -> int:
-	return ItemSystem.PER_DOOR
+func device_total() -> int:
+	return DeviceSystem.DEVICE_COUNT
 
-func door_installs(idx: int) -> int:
-	return items.door_installs(idx)
+func device_ratio(idx: int) -> float:
+	return devices.ratio(idx)
 
-func best_progress() -> int:
-	return items.best_progress()
+func device_done(idx: int) -> bool:
+	return devices.done(idx)
+
+func devices_destroyed() -> int:
+	return devices.destroyed_count()
+
+func escape_open() -> bool:
+	return devices.all_destroyed()
+
+## Progress of the device the Runner is working on right now, or -1 when it is
+## not mashing anything (the HUD hides the bar rather than showing a stale one).
+func active_device_ratio() -> float:
+	return devices.ratio(devices.active_index) if devices.active_index >= 0 else -1.0
 
 func time_ratio() -> float:
 	return time_left / MATCH_TIME
@@ -75,54 +89,88 @@ func time_ratio() -> float:
 func time_seconds() -> int:
 	return int(ceil(time_left))
 
-func capture_ratio() -> float:
-	return grapple.cap
+func knock_count() -> int:
+	return knock.knocks
 
-func escape_ratio() -> float:
-	return grapple.esc
+func knock_ratio() -> float:
+	return knock.knock_ratio()
 
-# ---- keys / doors (called on the server by Item / EscapeDoor) --------------
+func runner_stunned() -> bool:
+	return knock.stunned()
 
-## Runner touched key `idx`. Picks it up if hands are free — carrying is the
-## Runner's main exposed window (GDD 4.1).
-func try_pickup(idx: int) -> void:
+func runner_iframe() -> bool:
+	return knock.invulnerable()
+
+# ---- sabotage (GDD 4.1) ---------------------------------------------------
+
+## The Runner mashed at a device. Which device is the SERVER's call: we ask the
+## device nodes who the Runner is actually standing in, rather than trusting an
+## index off the wire, so a hacked client cannot break a device from across the
+## map. The client's own range check is only there to skip pointless rpcs.
+##
+## "call_local" is REQUIRED, not decoration: the Runner is the host, so this
+## rpc_id(1) targets the caller itself, and Godot refuses a self-call unless the
+## rpc is declared call_local ("RPC on yourself is not allowed by selected mode").
+## Without it the Runner could not sabotage or kill at all. It costs nothing when
+## a client calls it — the local run just fails the is_server() check above.
+@rpc("any_peer", "call_local", "reliable")
+func sabotage_press() -> void:
 	if not multiplayer.is_server() or winner != "":
 		return
-	if items.carrying or grapple.active:
+	var id := _sender_id()
+	var runner: Node2D = _players.get_node_or_null(str(id))
+	if runner == null or runner.get("role") != Roles.RUNNER or runner.stunned:
 		return
-	items.carrying = true
-	_carried_index = idx
-	var it: Node = _items_root.get_node_or_null("Item%d" % idx)
-	if it != null:
-		it.set_held.rpc(true)
-	var runner := _find_runner()
-	if runner != null:
-		emit_sound(runner.global_position)   # grabbing a key is noisy (4.3)
-	_broadcast(true)
-
-## Runner touched door `idx` while carrying. Installs the key; the last one wins.
-func try_install(idx: int) -> void:
-	if not multiplayer.is_server() or winner != "" or not items.carrying:
+	var idx := _device_at_runner()
+	if idx < 0:
 		return
-	var it: Node = _items_root.get_node_or_null("Item%d" % _carried_index)
-	if it != null:
-		it.set_held.rpc(true)      # consumed: stays hidden
-	items.carrying = false
-	_carried_index = -1
-	var n := items.install(idx)
-	var runner := _find_runner()
-	if runner != null:
-		emit_sound(runner.global_position)
-	if n >= ItemSystem.PER_DOOR:
-		_set_winner(Roles.WIN_RUNNER)
+	var finished := devices.hit(idx)
+	_emit_sabotage_sound(idx, runner)
+	if finished:
+		_on_device_done()
 	else:
 		_broadcast(true)
+
+## Index of an unbroken device the Runner is standing in, or -1.
+func _device_at_runner() -> int:
+	for d in _devices_root.get_children():
+		if d.runner_in_range():
+			return d.index
+	return -1
+
+## One noise every SOUND_EVERY_HITS mashes, not one per tap.
+func _emit_sabotage_sound(idx: int, runner: Node2D) -> void:
+	var slice := devices.hits(idx) / SOUND_EVERY_HITS
+	if slice == int(_last_sound_slice.get(idx, -1)):
+		return
+	_last_sound_slice[idx] = slice
+	emit_sound(runner.global_position)
+
+## A device just broke. If that was the last one the way out opens — and it can
+## open while the Runner is ALREADY standing in it (it broke the device next to
+## the exit), which body_entered will never report, so check the overlap here.
+func _on_device_done() -> void:
+	_broadcast(true)
+	if not devices.all_destroyed():
+		return
+	for e in _escape_root.get_children():
+		if e.runner_inside():
+			_set_winner(Roles.WIN_RUNNER)
+			return
+
+## The Runner reached the escape point (called by EscapePoint on the server).
+func try_escape() -> void:
+	if not multiplayer.is_server() or winner != "":
+		return
+	if not devices.all_destroyed():
+		return          # still work to do; the way out is shut
+	_set_winner(Roles.WIN_RUNNER)
 
 # ---- sound exposure (GDD 4.3) --------------------------------------------
 
 ## Called on the server when the Runner does something noisy (slides a tunnel,
-## grabs / installs a key, ...). Splits Hunters into "near" (get a vision-clarity
-## boost) and "far" (get a minimap ping), then relays to every peer.
+## mashes a device, kills someone, ...). Splits Hunters into "near" (get a
+## vision-clarity boost) and "far" (get a minimap ping), then relays to every peer.
 func emit_sound(world_pos: Vector2) -> void:
 	if not multiplayer.is_server() or winner != "":
 		return
@@ -138,82 +186,103 @@ func emit_sound(world_pos: Vector2) -> void:
 func _sound(world_pos: Vector2, near_ids: Array) -> void:
 	sound_heard.emit(world_pos, near_ids.has(multiplayer.get_unique_id()))
 
-# ---- mash input (both sides tap "attack") ---------------------------------
+# ---- knock input (Hunters tap "attack") -----------------------------------
 
-@rpc("any_peer", "reliable")
+## One Hunter swung at the Runner. Every gate here is the server's call — the
+## client's own range test (player_combat) is only prediction.
+## call_local so this still works if a Hunter ever hosts — see sabotage_press.
+@rpc("any_peer", "call_local", "reliable")
 func hunter_press() -> void:
 	if not multiplayer.is_server() or winner != "":
 		return
-	var id := multiplayer.get_remote_sender_id()
+	var id := _sender_id()
 	var h: Node2D = _players.get_node_or_null(str(id))
 	var runner := _find_runner()
 	if h == null or h.dead or runner == null:
 		return
+	if h.get("role") != Roles.HUNTER:
+		return
 	if not _in_range(h, runner):
 		return
-	if not grapple.active:
-		# Start a grapple: only a capturable (carrying / cornered) Runner can be grabbed.
-		if grapple.on_cooldown() or not runner.capturable:
-			return
-		grapple.start()
-		_broadcast(true)
-	elif grapple.add_capture():
-		_on_capture_full()
+	if not knock.can_knock():
+		return          # inside an iframe, or already stunned
+	_knock_back(h, runner)
+	if knock.add_knock():
+		_on_stun()
 	else:
-		_broadcast(false)
+		# Every knock moves the count, which both roles can see — always reliable.
+		_broadcast(true)
 
+# ---- kill input (the Runner taps "attack") --------------------------------
+
+## The Runner swung at a Hunter. A kill buys the Runner time and a lane, not a
+## removed opponent — Hunters respawn forever (GDD 4.6).
+## call_local is required — see sabotage_press.
 @rpc("any_peer", "call_local", "reliable")
-func runner_press() -> void:
+func attack_press() -> void:
 	if not multiplayer.is_server() or winner != "":
 		return
-	if grapple.active:
-		if grapple.add_escape():
-			_faint_grabbers()  # the Runner wrenched free -> grabbers are left dazed
-			_broadcast(true)   # escaped -> grapple ended
-		else:
-			_broadcast(false)
-
-## Runner broke the grip: daze every Hunter that was in grabbing range so the
-## Runner gets a real getaway window. Runs each Hunter's faint on its own peer.
-func _faint_grabbers() -> void:
-	var runner := _find_runner()
-	if runner == null:
+	var id := _sender_id()
+	var runner: Node2D = _players.get_node_or_null(str(id))
+	if runner == null or runner.get("role") != Roles.RUNNER:
 		return
-	for c in _players.get_children():
-		if c.get("role") == Roles.HUNTER and not c.dead and _in_range(c, runner):
-			c.faint.rpc_id(c.get_multiplayer_authority(), FAINT_TIME)
-
-## Capture bar filled. Not a win (GDD 4.1): scatter the key the Runner was
-## carrying to a fresh spot, briefly stun, and reset the mash-off for next time.
-func _on_capture_full() -> void:
-	var runner := _find_runner()
-	if items.carrying and _carried_index >= 0:
-		items.carrying = false
-		var it: Node = _items_root.get_node_or_null("Item%d" % _carried_index)
-		if it != null:
-			it.place.rpc(_scatter_spot())
-		_carried_index = -1
-	grapple.reset()
-	if runner != null:
-		# Host == Runner, so the recovery stun can be applied directly.
-		runner.movement.exit_stun_left = maxf(runner.movement.exit_stun_left, CAPTURE_STUN)
+	if runner.stunned or _attack_cd_left > 0.0:
+		return
+	var victim := _kill_target(runner)
+	if victim == null:
+		return          # swung at nothing: no kill, and no cooldown burned
+	_attack_cd_left = PlayerCombat.ATTACK_CD
+	victim.kill.rpc_id(victim.get_multiplayer_authority())
+	# Tell the Runner's own peer to start its cooldown mirror. Only a landed kill
+	# does this, so a whiff never costs the Runner its anti-pincer tool.
+	runner.attack_confirmed.rpc_id(id)
+	emit_sound(runner.global_position)
 	_broadcast(true)
 
-## A random standable world point clear of the doors and the Runner.
-func _scatter_spot() -> Vector2:
+## Nearest living Hunter inside the Runner's reach and on the side it faces.
+## `net_flip` is replicated, so the server can read the Runner's facing directly
+## rather than trusting the client to report it.
+func _kill_target(runner: Node2D) -> Node2D:
+	var facing := -1.0 if runner.net_flip else 1.0
+	var best: Node2D = null
+	var best_d := INF
+	for c in _players.get_children():
+		if c.get("role") != Roles.HUNTER or c.dead:
+			continue
+		var to: Vector2 = c.global_position - runner.global_position
+		if signf(to.x) != facing and absf(to.x) > 4.0:
+			continue
+		var d := to.length()
+		if d <= PlayerCombat.KILL_RANGE and d < best_d:
+			best_d = d
+			best = c
+	return best
+
+## Shove the Runner along the direction the KNOCKER IS FACING. GDD 4.3 wants a
+## knock to physically kick the Runner off what it was breaking, and taking the
+## direction from the Hunter's facing (rather than from who is left of whom) makes
+## that a thing the Hunter aims: line up the side you want it driven towards. It
+## also stays stable when the two are practically on top of each other, where the
+## relative-position sign flips back and forth frame to frame.
+##
+## `net_flip` is replicated, so the server reads the Hunter's real facing instead
+## of trusting the client to report it.
+func _knock_back(h: Node2D, runner: Node2D) -> void:
+	var dir := -1.0 if h.net_flip else 1.0
+	runner.knockback.rpc_id(
+		runner.get_multiplayer_authority(), dir * KnockSystem.KNOCKBACK_VX)
+
+## Third knock landed: stun the Runner and knock back whatever it was breaking.
+## The rollback is the real cost — the stun alone is just seconds.
+func _on_stun() -> void:
 	var runner := _find_runner()
-	var avoid: Array = []
+	devices.on_runner_stunned()
 	if runner != null:
-		avoid.append(runner.global_position)
-	for d in _doors_root.get_children():
-		if d is Node2D:
-			avoid.append(d.global_position)
-	if _terrain != null:
-		var layout := LevelLayout.new(_terrain)
-		var spot: Variant = layout.random_floor(avoid, SCATTER_MIN_SEP)
-		if spot != null:
-			return spot
-	return (runner.global_position if runner != null else Vector2.ZERO) + Vector2(0, -8)
+		# Run the stun on the Runner's OWN peer. The old code wrote the Runner's
+		# stun timer directly on the host because "host == Runner" — which silently
+		# stopped working the moment a Hunter hosted.
+		runner.stun.rpc_id(runner.get_multiplayer_authority(), KnockSystem.STUN_TIME)
+	_broadcast(true)
 
 # ---- per-frame upkeep -----------------------------------------------------
 
@@ -225,11 +294,12 @@ func _physics_process(delta: float) -> void:
 	if time_left <= 0.0:
 		_set_winner(Roles.WIN_HUNTERS)
 		return
-	grapple.tick_cooldown(delta)
-	var runner := _find_runner()
-	if runner != null and grapple.active:
-		if not _any_hunter_in_range(runner):
-			grapple.end(false)
+	if _attack_cd_left > 0.0:
+		_attack_cd_left -= delta
+	if devices.active_index >= 0 and _device_at_runner() < 0:
+		devices.active_index = -1
+		_broadcast(false)
+	if knock.tick(delta):
 		_broadcast(false)
 	# Keep the clock (and any drift) in sync a couple times a second.
 	_sync_accum += delta
@@ -239,14 +309,16 @@ func _physics_process(delta: float) -> void:
 
 # ---- helpers --------------------------------------------------------------
 
-func _in_range(h: Node2D, runner: Node2D) -> bool:
-	return h.global_position.distance_to(runner.global_position) <= capture_range
+## Peer id of whoever called the rpc we are inside. A remote caller reports its
+## own id; a LOCAL call (the host calling rpc_id(1) on itself) reports 0, so map
+## that back to our own id. Player nodes are named after peer ids, and looking up
+## "0" finds nothing — which would silently drop every action the host takes.
+func _sender_id() -> int:
+	var id := multiplayer.get_remote_sender_id()
+	return multiplayer.get_unique_id() if id == 0 else id
 
-func _any_hunter_in_range(runner: Node2D) -> bool:
-	for c in _players.get_children():
-		if c.get("role") == Roles.HUNTER and not c.dead and _in_range(c, runner):
-			return true
-	return false
+func _in_range(h: Node2D, runner: Node2D) -> bool:
+	return h.global_position.distance_to(runner.global_position) <= KnockSystem.KNOCK_RANGE
 
 func _find_runner() -> Node2D:
 	for c in _players.get_children():
@@ -258,7 +330,8 @@ func _find_runner() -> Node2D:
 
 func _set_winner(w: String) -> void:
 	winner = w
-	grapple.force_end()
+	knock.force_end()
+	devices.force_end()
 	_broadcast(true)
 	# The round is over — drop any dev snapshot so the next launch starts fresh.
 	if DevSnapshot.enabled():
@@ -266,49 +339,58 @@ func _set_winner(w: String) -> void:
 
 # ---- dev resume (server-only match state; see DevSnapshot) -----------------
 
+## Bumped whenever the shape below changes. restore_state refuses anything else:
+## a snapshot from the old grapple/key build has `installs` and no device
+## progress, so restoring it would silently produce a nonsense round (every device
+## intact, but the state it was saved with long gone) rather than fail loudly.
+const SNAPSHOT_VERSION := 2
+
 func snapshot_state() -> Dictionary:
 	return {
-		"installs": items.installs.duplicate(),
-		"carrying": items.carrying,
-		"carried_index": _carried_index,
+		"v": SNAPSHOT_VERSION,
+		"prog": devices.progress.duplicate(),
+		"active": devices.active_index,
 		"time": time_left,
 		"winner": winner,
-		"cap": grapple.cap,
-		"esc": grapple.esc,
-		"cap_floor": grapple.cap_floor,
-		"active": grapple.active,
+		"knocks": knock.knocks,
+		"decay": knock.decay_left,
+		"iframe": knock.iframe_left,
+		"stun": knock.stun_left,
 	}
 
 func restore_state(d: Dictionary) -> void:
-	items.installs = (d.get("installs", {}) as Dictionary).duplicate()
-	items.carrying = bool(d.get("carrying", false))
-	_carried_index = int(d.get("carried_index", -1))
+	if int(d.get("v", 1)) != SNAPSHOT_VERSION:
+		return         # stale schema: start fresh rather than restore garbage
+	devices.progress = (d.get("prog", {}) as Dictionary).duplicate()
+	devices.active_index = int(d.get("active", -1))
 	time_left = float(d.get("time", MATCH_TIME))
 	winner = str(d.get("winner", ""))
-	grapple.cap = float(d.get("cap", 0.0))
-	grapple.esc = float(d.get("esc", 0.0))
-	grapple.cap_floor = float(d.get("cap_floor", 0.0))
-	grapple.active = bool(d.get("active", false))
+	knock.knocks = int(d.get("knocks", 0))
+	knock.decay_left = float(d.get("decay", 0.0))
+	knock.iframe_left = float(d.get("iframe", 0.0))
+	knock.stun_left = float(d.get("stun", 0.0))
 	_broadcast(true)   # push the restored state to every peer's HUD
 
 func _state_dict() -> Dictionary:
 	return {
-		"installs": items.installs,
-		"carrying": items.carrying,
+		"prog": devices.progress,
+		"active": devices.active_index,
 		"time": time_left,
-		"cap": grapple.cap,
-		"esc": grapple.esc,
-		"active": grapple.active,
+		"knocks": knock.knocks,
+		"iframe": knock.iframe_left,
+		"stun": knock.stun_left,
 		"winner": winner,
 	}
 
 func _apply_state(d: Dictionary) -> void:
-	items.installs = d.get("installs", {})
-	items.carrying = bool(d.get("carrying", false))
+	# duplicate(), not the dict itself: _sync_state is call_local, so on the host
+	# the incoming dict IS the live one and aliasing it would tie the two together.
+	devices.progress = (d.get("prog", {}) as Dictionary).duplicate()
+	devices.active_index = int(d.get("active", -1))
 	time_left = float(d.get("time", MATCH_TIME))
-	grapple.cap = float(d.get("cap", 0.0))
-	grapple.esc = float(d.get("esc", 0.0))
-	grapple.active = bool(d.get("active", false))
+	knock.knocks = int(d.get("knocks", 0))
+	knock.iframe_left = float(d.get("iframe", 0.0))
+	knock.stun_left = float(d.get("stun", 0.0))
 	winner = str(d.get("winner", ""))
 	state_changed.emit()
 
