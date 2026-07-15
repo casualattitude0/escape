@@ -59,10 +59,17 @@ func update_grapple() -> bool:
 		grappling = true
 	return grappling
 
-## After movement, slide this fighter toward its opponent so the two bodies meet
-## in the middle and read as locked together (both Hunter and Runner close in).
+## After movement, slide the grabbing Hunter onto the Runner so the two bodies read
+## as locked together.
+##
+## Only the Hunter closes the gap. Having both fighters snap looks symmetrical but
+## never settles: each aims to sit GRAB_DISTANCE from where it *sees* the other, and
+## it sees a position replicated 45ms ago (see $Sync in player.gd). Two chasers each
+## closing the same gap overshoot it into 44 - gap and swing back, so the pair jitters
+## around a stale offset forever instead of locking. The Runner is already immobile
+## for the whole grapple, so one chaser onto a static target converges cleanly.
 func apply_snap(delta: float) -> void:
-	if not grappling or _opponent == null:
+	if not grappling or _opponent == null or body.role != Roles.HUNTER:
 		return
 	var dx: float = _opponent.global_position.x - body.global_position.x
 	var s := signf(dx)
