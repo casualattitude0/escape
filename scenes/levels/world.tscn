@@ -4,8 +4,8 @@
 [ext_resource type="PackedScene" path="res://scenes/levels/level.tscn" id="2"]
 [ext_resource type="Script" uid="uid://c60jo3a6ak4hy" path="res://scripts/world/game_manager.gd" id="3"]
 [ext_resource type="Script" uid="uid://cuk022c1is02j" path="res://scripts/ui/hud.gd" id="6"]
-[ext_resource type="Script" uid="uid://6ckk13jxob67" path="res://scripts/world/item_system.gd" id="7"]
-[ext_resource type="Script" uid="uid://c8hjj5n1vx8xv" path="res://scripts/world/grapple_system.gd" id="8"]
+[ext_resource type="Script" uid="uid://6ckk13jxob67" path="res://scripts/world/device_system.gd" id="7"]
+[ext_resource type="Script" uid="uid://uno1eq7wayiy" path="res://scripts/world/knock_system.gd" id="8"]
 [ext_resource type="Script" uid="uid://bvdoj0u0jj4nu" path="res://scripts/ui/fog.gd" id="9"]
 [ext_resource type="Script" uid="uid://ba58li2l7sylr" path="res://scripts/ui/minimap.gd" id="10"]
 
@@ -32,15 +32,15 @@ spawn_path = NodePath("../Players")
 [node name="GameManager" type="Node" parent="." unique_id=674786230]
 script = ExtResource("3")
 
-[node name="ItemSystem" type="Node" parent="GameManager" unique_id=556143540]
+[node name="DeviceSystem" type="Node" parent="GameManager" unique_id=556143540]
 script = ExtResource("7")
 
-[node name="GrappleSystem" type="Node" parent="GameManager" unique_id=854305403]
+[node name="KnockSystem" type="Node" parent="GameManager" unique_id=854305403]
 script = ExtResource("8")
 
-[node name="Items" type="Node2D" parent="." unique_id=124564449]
+[node name="Devices" type="Node2D" parent="." unique_id=124564449]
 
-[node name="Doors" type="Node2D" parent="." unique_id=2108603257]
+[node name="Escape" type="Node2D" parent="." unique_id=2108603257]
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1038874089]
 script = ExtResource("6")
@@ -98,7 +98,7 @@ offset_top = 104.0
 offset_right = 260.0
 offset_bottom = 128.0
 theme_override_colors/font_color = Color(1, 0, 0, 1)
-text = "Capture"
+text = "Knocked"
 
 [node name="CaptureBar" type="ProgressBar" parent="HUD" unique_id=452403102]
 unique_name_in_owner = true
@@ -130,7 +130,7 @@ offset_top = 158.0
 offset_right = 260.0
 offset_bottom = 182.0
 theme_override_colors/font_color = Color(1, 0, 0, 1)
-text = "Escape"
+text = "Sabotage"
 
 [node name="EscapeBar" type="ProgressBar" parent="HUD" unique_id=253553229]
 unique_name_in_owner = true

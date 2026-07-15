@@ -4,8 +4,8 @@ extends Node2D
 ## GameManager for the actual match. The host is the Runner; joiners are Hunters.
 
 const PLAYER := preload("res://scenes/actors/player.tscn")
-const ITEM := preload("res://scenes/actors/item.tscn")
-const DOOR := preload("res://scenes/actors/escape_door.tscn")
+const DEVICE := preload("res://scenes/actors/device.tscn")
+const ESCAPE := preload("res://scenes/actors/escape_point.tscn")
 
 const RUNNER_SPAWN := Vector2(208, 1690)
 const HUNTER_SPAWNS := [
@@ -15,14 +15,14 @@ const HUNTER_SPAWNS := [
 	Vector2(1950, 1650),
 ]
 
-# Keys are interchangeable now (GDD 4.1), so they share one colour.
-const KEY_COLOR := Color(0.95, 0.82, 0.25)
-const DOOR_COUNT := 3
+# One way out (GDD 3): it opens only once every device is broken, so there is
+# nothing to choose between and no reason for a second.
+const ESCAPE_COUNT := 1
 
 @onready var spawner: MultiplayerSpawner = $MultiplayerSpawner
 @onready var players_root: Node = $Players
-@onready var items_root: Node2D = $Items
-@onready var doors_root: Node2D = $Doors
+@onready var devices_root: Node2D = $Devices
+@onready var escape_root: Node2D = $Escape
 @onready var terrain: TileMapLayer = $Terrain
 
 # ids that have confirmed their world scene is ready (server-side only)
@@ -57,6 +57,12 @@ func _ready() -> void:
 		# stale positions from when the round finished. Only meant to pick a
 		# live/unfinished round back up, so discard it too.
 		if not _resume.is_empty() and String(_resume.get("gm", {}).get("winner", "")) != "":
+			_resume = {}
+		# A snapshot from an older build has a match state this version cannot read
+		# (keys and doors, where there are now devices and one exit). Restoring it
+		# would quietly produce a nonsense round rather than fail, so drop it.
+		if not _resume.is_empty() \
+				and int(_resume.get("gm", {}).get("v", 1)) != GameManager.SNAPSHOT_VERSION:
 			_resume = {}
 		_ready_peers[1] = true
 		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
@@ -113,33 +119,35 @@ func rejoin_new_peer() -> void:
 	Net.reload_all()
 
 ## Every peer builds the same layout from the shared seed (see LevelLayout).
-## Items and doors are plain scene nodes with matching names on all peers, so
-## their pickup / open rpcs resolve identically.
+## Devices and the escape point are plain scene nodes with matching names on all
+## peers, so the rpcs and index lookups resolve identically everywhere.
+##
+## LevelLayout still calls these "items" and "doors"; it scatters devices first
+## and then places the escape point in the room FARTHEST from the Runner's spawn,
+## clear of the spawn and of every device — which is what GDD 4.7 asks for, so it
+## needs no changes to serve the new model.
 @rpc("authority", "call_local", "reliable")
 func _build_layout(layout_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = layout_seed
-	# Fixed 3 doors + 3 interchangeable keys (GDD 4.1); complete any one door.
-	var item_count := ItemSystem.KEYS_TOTAL
 
 	var layout := LevelLayout.new(terrain)
-	var plan := layout.generate(item_count, DOOR_COUNT, rng, RUNNER_SPAWN)
+	var plan := layout.generate(DeviceSystem.DEVICE_COUNT, ESCAPE_COUNT, rng, RUNNER_SPAWN)
 
-	var item_spots: Array = plan["items"]
-	var door_spots: Array = plan["doors"]
-	for i in item_spots.size():
-		var item := ITEM.instantiate()
-		item.name = "Item%d" % i
-		item.index = i
-		item.position = item_spots[i]
-		item.get_node("Fill").color = KEY_COLOR
-		items_root.add_child(item)
-	for i in door_spots.size():
-		var door := DOOR.instantiate()
-		door.name = "Door%d" % i
-		door.index = i
-		door.position = door_spots[i]
-		doors_root.add_child(door)
+	var device_spots: Array = plan["items"]
+	var escape_spots: Array = plan["doors"]
+	for i in device_spots.size():
+		var device := DEVICE.instantiate()
+		device.name = "Device%d" % i
+		device.index = i
+		device.position = device_spots[i]
+		devices_root.add_child(device)
+	for i in escape_spots.size():
+		var exit_point := ESCAPE.instantiate()
+		exit_point.name = "Escape%d" % i
+		exit_point.index = i
+		exit_point.position = escape_spots[i]
+		escape_root.add_child(exit_point)
 
 func _spawn_player(id: int) -> Node:
 	var p := PLAYER.instantiate()
@@ -196,20 +204,13 @@ func _resume_point(id: int, role: String) -> Variant:
 		return arr[idx]
 	return null
 
-## Runs on the host right after the layout is built. Re-hides already-collected
-## items, restores match state, then starts the periodic autosave.
+## Runs on the host right after the layout is built. Restores match state, then
+## starts the periodic autosave.
+##
+## Devices need no per-node restore: they never move, and their damage lives in
+## the GameManager's replicated state, so restore_state below repaints them.
 func _after_layout() -> void:
 	if not _resume.is_empty():
-		# Re-apply each key's live state: held (carried/installed -> hidden) or its
-		# last world position (available or scattered).
-		for st in _resume.get("key_states", []):
-			var item := items_root.get_node_or_null(str(st.get("name", "")))
-			if item == null:
-				continue
-			if bool(st.get("held", false)):
-				item.set_held.rpc(true)
-			else:
-				item.place.rpc(st.get("pos", item.position))
 		var gm := get_tree().get_first_node_in_group("game_manager")
 		if gm != null:
 			gm.restore_state(_resume.get("gm", {}))
@@ -225,20 +226,16 @@ func _save_snapshot() -> void:
 	if not snap.is_empty():
 		DevSnapshot.save(snap)
 
-## Capture the live match state (seed, taken items, player positions, game state)
-## as a plain dictionary. Used for both the dev-resume autosave and the live
-## rejoin snapshot. Returns {} if the match isn't ready.
+## Capture the live match state (seed, player positions, game state) as a plain
+## dictionary. Used for both the dev-resume autosave and the live rejoin
+## snapshot. Returns {} if the match isn't ready.
+##
+## Device damage is not listed here: it lives in gm.snapshot_state() and the
+## devices themselves are rebuilt from the seed, at fixed positions.
 func _build_snapshot() -> Dictionary:
 	var gm := get_tree().get_first_node_in_group("game_manager")
 	if gm == null:
 		return {}
-	var key_states: Array = []
-	for item in items_root.get_children():
-		key_states.append({
-			"name": item.name,
-			"pos": item.position,
-			"held": bool(item.get("_held")),
-		})
 	var runner_pos: Variant = null
 	var hunter_pos: Array = []
 	for c in players_root.get_children():
@@ -253,7 +250,6 @@ func _build_snapshot() -> Dictionary:
 				hunter_pos[idx] = c.global_position
 	return {
 		"seed": _active_seed,
-		"key_states": key_states,
 		"runner_pos": runner_pos,
 		"hunter_pos": hunter_pos,
 		"gm": gm.snapshot_state(),

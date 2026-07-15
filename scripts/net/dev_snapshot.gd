@@ -3,7 +3,7 @@ class_name DevSnapshot
 
 ## Dev-only match persistence, so a script edit + restart drops you back into the
 ## in-progress round instead of a fresh lobby. The host writes a snapshot of the
-## match (layout seed, item/grapple/winner state, player positions) to disk every
+## match (layout seed, sabotage/knock/winner state, player positions) to disk every
 ## couple of seconds; on the next launch the host restores it and syncs everyone.
 ##
 ## Entirely gated behind the "dev_resume" feature tag (set on the editor's
