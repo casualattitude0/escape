@@ -5,11 +5,14 @@ extends CharacterBody2D
 ## Effects) in a fixed order each physics frame. Only the owning peer runs
 ## input/physics; position and a bit of state are replicated to everyone else.
 ##
-## Roles: Runner (the monster) collects items and escapes; can slide tunnels and
-## melee. Hunter (the researcher) walks only and captures via the mash-off.
+## Roles: Runner (the monster) breaks the facility and escapes; can slide tunnels
+## and kill. Hunter (the researcher) walks only and knocks the Runner to stun it.
+
+const STUN_DRAG := 900.0     # how fast a stunned Runner's knockback slide bleeds off
+const KNOCK_HOP := -90.0     # small pop on a knock so the kick reads as a hit, not a nudge
+const KNOCK_STAGGER := 0.22  # Runner: no steering right after a knock, so the shove lands
 
 @onready var sprite: AnimatedSprite2D = $SpritePivot/AnimatedSprite2D
-@onready var carry_sprite: Sprite2D = $CarrySprite
 @onready var camera: Camera2D = $Camera2D
 @onready var movement: PlayerMovement = $Movement
 @onready var combat: PlayerCombat = $Combat
@@ -21,14 +24,13 @@ extends CharacterBody2D
 var role: String = Roles.HUNTER
 var net_anim: String = Anim.IDLE
 var net_flip: bool = false
-var capturable: bool = false     # Runner: currently vulnerable to a grab
 var dead: bool = false           # Hunter: killed, waiting to respawn
-var fainted: bool = false        # Hunter: dazed after a Runner escaped its grip
+var stunned: bool = false        # Runner: stunned by a third knock (GDD 4.6)
 
 # Set at spawn (world.gd); Hunters respawn here.
 var spawn_point: Vector2 = Vector2.ZERO
 
-# The GameManager (server-authoritative match/grapple state), found once.
+# The GameManager (server-authoritative match state), found once.
 var gm: Node
 
 func _ready() -> void:
@@ -46,8 +48,6 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	animator.render()
 	effects.render(delta)   # squash/stretch + dust: every peer, keyed off net_anim/net_flip
-	# The Runner shows the key it's ferrying (replicated carry state, every peer).
-	carry_sprite.visible = role == Roles.RUNNER and gm != null and gm.carrying()
 
 func _physics_process(delta: float) -> void:
 	if not is_multiplayer_authority():
@@ -59,16 +59,12 @@ func _physics_process(delta: float) -> void:
 		animator.publish(delta)
 		return
 
-	# Dazed after a Runner broke our grip: hold still, no moving or grabbing.
-	if fainted:
-		combat.grappling = false   # drop the grapple pose so the faint anim shows
-		movement.freeze()
-		animator.publish(delta)
-		return
-
-	# Mid-pounce: custom airborne physics (leap toward the Runner, snag on contact).
-	if combat.pouncing:
-		combat.pounce_step(delta)
+	# Stunned by a third knock: frozen, and the knockback carries us as we fall.
+	# Stun beats everything — it is the Hunters' whole payoff for landing three.
+	if stunned:
+		velocity.y += get_gravity().y * delta
+		velocity.x = move_toward(velocity.x, 0.0, STUN_DRAG * delta)
+		move_and_slide()
 		animator.publish(delta)
 		return
 
@@ -79,28 +75,64 @@ func _physics_process(delta: float) -> void:
 		return
 
 	movement.update_tunnel(delta)
-	var grappling := combat.update_grapple()
 	combat.tick_stiff(delta)
-	var immobile := grappling or combat.stiff_active() or movement.exit_stun_active()
+	var immobile := combat.stiff_active() or combat.stagger_active() \
+		or movement.exit_stun_active()
 
 	movement.tick(delta, not immobile)
 	effects.camera_juice(delta)   # lookahead + landing shake: real velocity, owner only
 
-	if role == Roles.RUNNER:
-		# Carrying a key is the Runner's main exposed window (GDD 4.1); the tunnel
-		# exit and standing still stay as minor windows.
-		capturable = (gm != null and gm.carrying()) or movement.exit_stun_active() or movement.is_slow()
-
-	combat.apply_snap(delta)
 	combat.handle_input(delta)
 	animator.publish(delta)
 
-@rpc("any_peer", "reliable")
+# Server -> owner calls. Two things here are load-bearing and neither is obvious:
+#
+# 1. They stay "any_peer" and check the sender by hand. The rpc mode "authority"
+#    would test against THIS NODE's authority, which is the owning peer (world.gd
+#    sets it per player), not the server — so it would reject peer 1 and accept
+#    only the victim's own peer. Exactly backwards.
+# 2. They are "call_local". The Runner IS the host, so every server -> Runner call
+#    (stun / knockback / attack_confirmed) is the host rpc-ing itself, and Godot
+#    drops a self-call unless it is declared call_local. Without it the Runner was
+#    never stunned and never pushed. See tools/test_rpc_call_local.tscn.
+
+## True when the call came from the server: either it arrived from peer 1, or it
+## ran locally on us and we ARE the server (a call_local self-call reports our own
+## id; the 0 case only shows up for a direct, non-rpc invocation).
+func _from_server() -> bool:
+	var s := multiplayer.get_remote_sender_id()
+	return s == 1 or ((s == 0 or s == multiplayer.get_unique_id()) and multiplayer.is_server())
+
+@rpc("any_peer", "call_local", "reliable")
 func kill() -> void:
 	# Called by the server on the hit Hunter's own peer.
+	if not _from_server():
+		return
 	health.kill()
 
-@rpc("any_peer", "reliable")
-func faint(duration: float) -> void:
-	# Called by the server on a grabbing Hunter's own peer after a Runner escapes.
-	health.faint(duration)
+@rpc("any_peer", "call_local", "reliable")
+func stun(duration: float) -> void:
+	# Called by the server on the Runner's own peer when a third knock lands.
+	if not _from_server():
+		return
+	health.stun(duration)
+
+@rpc("any_peer", "call_local", "reliable")
+func attack_confirmed() -> void:
+	# Called by the server on the Runner's own peer when a kill actually lands.
+	if not _from_server():
+		return
+	combat.start_attack_cd()
+
+@rpc("any_peer", "call_local", "reliable")
+func knockback(vx: float) -> void:
+	# Called by the server on the Runner's own peer for every knock that lands:
+	# shove it the way the Hunter is facing, off whatever it was breaking.
+	if not _from_server():
+		return
+	velocity.x = vx
+	velocity.y = minf(velocity.y, KNOCK_HOP)
+	# Brief loss of control so the shove actually reads. Without it the next
+	# movement.tick() would steer velocity.x straight back to whatever the Runner
+	# is holding and the hit would look like nothing happened.
+	combat.stagger(KNOCK_STAGGER)

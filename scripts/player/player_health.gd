@@ -1,21 +1,24 @@
 extends Node
 class_name PlayerHealth
 
-## Hunter death + respawn and the post-escape faint. The `dead` / `fainted` flags
-## live on the body (they are replicated); this component owns their timers.
+## Hunter death + respawn, and the Runner's knock-stun. The `dead` / `stunned`
+## flags live on the body (they are replicated); this component owns their timers.
+##
+## Hunters die and respawn forever; the Runner cannot die at all (GDD 4.6) — the
+## worst that happens to it is a stun, which costs it time, not the match.
 
 const RESPAWN_TIME := 3.0
 
 @onready var body: CharacterBody2D = get_parent()
 
 var _dead_left: float = 0.0
-var _faint_left: float = 0.0
+var _stun_left: float = 0.0
 
 func tick(delta: float) -> void:
-	if body.fainted:
-		_faint_left -= delta
-		if _faint_left <= 0.0:
-			body.fainted = false
+	if body.stunned:
+		_stun_left -= delta
+		if _stun_left <= 0.0:
+			body.stunned = false
 	if not body.dead:
 		return
 	_dead_left -= delta
@@ -30,10 +33,8 @@ func kill() -> void:
 	body.dead = true
 	_dead_left = RESPAWN_TIME
 
-## Called by the server (via the body's faint() rpc) on a grabbing Hunter's own
-## peer when the Runner wrenches free. Dead Hunters ignore it.
-func faint(duration: float) -> void:
-	if body.dead:
-		return
-	body.fainted = true
-	_faint_left = duration
+## Called by the server (via the body's stun() rpc) on the Runner's own peer when
+## a third knock lands. Re-stunning extends rather than shortens the window.
+func stun(duration: float) -> void:
+	body.stunned = true
+	_stun_left = maxf(_stun_left, duration)

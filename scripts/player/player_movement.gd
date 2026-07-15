@@ -27,7 +27,6 @@ class_name PlayerMovement
 @export var air_acceleration: float = 1400.0 # air steering, below ground acceleration by design
 @export var air_turn_accel_mult: float = 1.6 # extra kick when reversing direction mid-air
 
-const CAPTURE_SPEED_MAX := 55.0   # Runner is capturable at/below this speed
 const TUNNEL_EXIT_STUN := 0.5     # frozen recovery after leaving a tunnel
 
 var crouched: bool = false
@@ -49,9 +48,6 @@ var _was_on_floor: bool = true
 
 func exit_stun_active() -> bool:
 	return exit_stun_left > 0.0
-
-func is_slow() -> bool:
-	return absf(body.velocity.x) <= CAPTURE_SPEED_MAX
 
 func freeze() -> void:
 	body.velocity = Vector2.ZERO

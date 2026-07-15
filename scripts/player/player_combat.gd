@@ -1,165 +1,157 @@
 extends Node
 class_name PlayerCombat
 
-## Attack + capture-grapple participation, and routing the shared "attack" key to
-## the GameManager. The mash-off state itself lives on the server (GrappleSystem);
-## this component decides whether this player is a participant, snaps a grabbing
-## Hunter onto the Runner, and forwards taps.
+## Routes the shared "attack" key to the GameManager and owns this player's local
+## recovery lockout. All the state that matters (knock count, iframes, stun) lives
+## on the server; this component only forwards taps and predicts well enough to
+## pick a recovery length and play an animation on the same frame as the press.
+##
+## Hunter: F is a single knock swing. There is no charge, no grab, no pounce — the
+## Hunter's only verb is the knock (GDD 4.6), and it has to walk into range to use
+## it. Range and cadence are re-tested on the server; the client's own check only
+## decides whether this swing whiffs and eats the longer stiff.
+##
+## Runner: F kills a Hunter in front of it. Hunters respawn forever, so a kill buys
+## seconds and a walk-back, not a removed opponent (GDD 4.6).
 
-const GRAB_DISTANCE := 22.0       # half-gap each fighter closes to so bodies read as locked
-const GRAB_SNAP := 260.0          # how fast a fighter slides into grab distance
-const GRAB_COMMIT := 0.16         # brief lunge hold on a connecting grab (covers replication lag)
-const WHIFF_STIFF := 0.55         # recovery lockout after a Hunter's grab hits nothing
+const KNOCK_HIT_STIFF := 0.18     # brief hold on a connecting knock
+const KNOCK_WHIFF_STIFF := 0.45   # longer recovery when the swing hits nothing
 
-# Pounce: hold F to charge a leap toward the Hunter's facing, then release. A quick
-# tap (below POUNCE_MIN_CHARGE) stays the point-blank grab; longer holds leap farther.
-const POUNCE_MIN_CHARGE := 0.12   # hold shorter than this -> a plain tap grab, no leap
-const POUNCE_MAX_CHARGE := 0.5    # charge saturates here
-const POUNCE_VX_MIN := 240.0      # launch speed at min charge
-const POUNCE_VX_MAX := 430.0      # launch speed at full charge
-const POUNCE_VY := -175.0         # upward kick of the leap arc: low and flat, not a high hop
-const POUNCE_CONTACT := 26.0      # bodies-touching radius that snags a Runner mid-flight
-const POUNCE_LAND_STIFF := 0.5    # recovery lockout after a pounce lands on nothing
+# A kill does not have to out-last PlayerHealth.RESPAWN_TIME (3.0): what actually
+# stops the Runner re-killing a Hunter is that the Hunter respawns across the map
+# and has to walk back (world.gd HUNTER_SPAWNS). The cooldown is only there to stop
+# it deleting a whole group on the spot before they can form a pincer.
+const ATTACK_CD := 2.5            # Runner: seconds between kills
+# Deliberately close to KnockSystem.KNOCK_RANGE (64): with the bodies' 13px capsule
+# radius, two players standing together are ~26px apart, so a short reach turns
+# into "the kill never connects" once replication lag is in play. The monster is
+# meant to be the stronger duellist (GDD 4.6), so it should not be out-ranged.
+const KILL_RANGE := 56.0          # Runner: reach of the kill swing
+
+enum Mode { ATTACK, BREAK }
 
 @onready var body: CharacterBody2D = get_parent()
 
-var grappling: bool = false       # locked in an active grapple this frame
-var pouncing: bool = false        # Hunter: airborne mid-pounce, driven by pounce_step()
-var _opponent: Node2D             # the other fighter to snap onto / face this frame
 var _runner_ref: Node
-var _stiff_left: float = 0.0      # Hunter: committed to the grab lunge / whiff recovery, immobile
-var _charge: float = 0.0          # Hunter: how long F has been held this press
+var _stiff_left: float = 0.0      # committed to a swing / its miss recovery, immobile
+var _stagger_left: float = 0.0    # Runner: knocked, riding the shove, no steering
+var _attack_cd_left: float = 0.0  # Runner: local mirror of the server's cooldown
+var mode: int = Mode.ATTACK       # Runner: default attack; F near device enters break
 
-## True while a Hunter is locked in a grab lunge or its miss recovery.
+## True while this player is locked in a swing or its recovery.
 func stiff_active() -> bool:
 	return _stiff_left > 0.0
+
+## True while a knock's shove is still carrying this player.
+func stagger_active() -> bool:
+	return _stagger_left > 0.0
+
+## Called on the Runner's own peer when a knock lands (see player.knockback).
+func stagger(duration: float) -> void:
+	_stagger_left = maxf(_stagger_left, duration)
 
 func tick_stiff(delta: float) -> void:
 	if _stiff_left > 0.0:
 		_stiff_left -= delta
+	if _stagger_left > 0.0:
+		_stagger_left -= delta
+	if _attack_cd_left > 0.0:
+		_attack_cd_left -= delta
 
-## Decide grapple participation for this frame. Runner: participating whenever a
-## grapple is active. Hunter: participating while a grapple is active and it is in
-## range of the Runner. Returns whether this player is locked in the grapple.
-func update_grapple() -> bool:
-	grappling = false
-	_opponent = null
-	var gm: Node = body.gm
-	if gm == null or not gm.grappling():
-		return false
-	if body.role == Roles.RUNNER:
-		_opponent = _find_hunter(gm)
-		grappling = true
-		return true
-	if body.dead:
-		return false
-	var r := _find_runner(gm)
-	if r != null and body.global_position.distance_to(r.global_position) <= gm.capture_range:
-		_opponent = r
-		grappling = true
-	return grappling
+## Runner: true while the kill is still recharging (drives the HUD prompt).
+func attack_ready() -> bool:
+	return _attack_cd_left <= 0.0
 
-## After movement, slide the grabbing Hunter onto the Runner so the two bodies read
-## as locked together.
-##
-## Only the Hunter closes the gap. Having both fighters snap looks symmetrical but
-## never settles: each aims to sit GRAB_DISTANCE from where it *sees* the other, and
-## it sees a position replicated 45ms ago (see $Sync in player.gd). Two chasers each
-## closing the same gap overshoot it into 44 - gap and swing back, so the pair jitters
-## around a stale offset forever instead of locking. The Runner is already immobile
-## for the whole grapple, so one chaser onto a static target converges cleanly.
-func apply_snap(delta: float) -> void:
-	if not grappling or _opponent == null or body.role != Roles.HUNTER:
-		return
-	var dx: float = _opponent.global_position.x - body.global_position.x
-	var s := signf(dx)
-	if s == 0.0:
-		s = 1.0
-	body.global_position.x = move_toward(
-		body.global_position.x, _opponent.global_position.x - s * GRAB_DISTANCE, GRAB_SNAP * delta)
-
-func handle_input(delta: float) -> void:
+func handle_input(_delta: float) -> void:
 	var gm: Node = body.gm
 	if gm == null:
 		return
 	if body.role == Roles.HUNTER:
-		_hunter_input(gm, delta)
-	elif Input.is_action_just_pressed("attack") and gm.grappling():
-		gm.runner_press.rpc_id(1)         # escape tap
-		body.animator.pulse()             # instant local strain feedback on the tap
+		_hunter_input(gm)
+	else:
+		_runner_input(gm)
 
-## Hunter F handling. Locked on -> mash taps. Otherwise F charges while held: a
-## quick tap is the point-blank grab, a longer hold launches a pounce leap toward
-## the Hunter's facing on release.
-func _hunter_input(gm: Node, delta: float) -> void:
-	if body.dead:
-		_charge = 0.0
-		return
-	if grappling:
-		_charge = 0.0
-		if Input.is_action_just_pressed("attack"):
-			gm.hunter_press.rpc_id(1)     # already locked on: this is a mash tap
-			body.animator.pulse()
-		return
-	if _stiff_left > 0.0:
-		_charge = 0.0
-		return
-	if Input.is_action_pressed("attack"):
-		_charge += delta
-	if Input.is_action_just_released("attack"):
-		if _charge >= POUNCE_MIN_CHARGE and body.is_on_floor():
-			_start_pounce(gm)
+## Runner F key: context-sensitive. Near a device → enter break mode and start
+## sabotaging. Already in break mode → keep mashing. Any move key exits break
+## mode. Away from devices in attack mode → kill swing at Hunters.
+func _runner_input(gm: Node) -> void:
+	if mode == Mode.BREAK:
+		var dir := Input.get_axis("move_left", "move_right")
+		if dir != 0.0 or Input.is_action_just_pressed("jump"):
+			mode = Mode.ATTACK
+			return
+		if not Input.is_action_just_pressed("attack"):
+			return
+		if not _device_in_range(gm):
+			mode = Mode.ATTACK
+			return
+		body.animator.sabotage()
+		gm.sabotage_press.rpc_id(1)
+	else:
+		if not Input.is_action_just_pressed("attack"):
+			return
+		if _device_in_range(gm):
+			mode = Mode.BREAK
+			body.animator.sabotage()
+			gm.sabotage_press.rpc_id(1)
 		else:
-			_attempt_grab(gm)             # quick tap = point-blank grab
-		_charge = 0.0
+			if _attack_cd_left > 0.0:
+				return
+			body.animator.attack()
+			_attack_cd_left = ATTACK_CD
+			if _find_target_hunter(gm) != null:
+				gm.attack_press.rpc_id(1)
 
-## Hunter lunges for a point-blank grab: play the reach immediately, ask the server
-## to start the grapple, and lock into a recovery. A connecting grab holds only
-## briefly (the grapple takes over); a whiff eats a longer stiff so misses are punished.
-func _attempt_grab(gm: Node) -> void:
-	body.animator.lunge()
-	gm.hunter_press.rpc_id(1)
-	_stiff_left = GRAB_COMMIT if _grab_would_hit(gm) else WHIFF_STIFF
+## Is an unbroken device close enough to work on? Prediction only — the server
+## re-derives which device (if any) from real overlaps.
+func _device_in_range(gm: Node) -> bool:
+	for d in gm.devices_root().get_children():
+		if gm.device_done(d.index):
+			continue
+		if body.global_position.distance_to(d.global_position) <= DeviceSystem.DEVICE_RANGE:
+			return true
+	return false
 
-## Launch the charged pounce: a facing-ward leap whose speed scales with charge.
-func _start_pounce(gm: Node) -> void:
-	var power := clampf((_charge - POUNCE_MIN_CHARGE) / (POUNCE_MAX_CHARGE - POUNCE_MIN_CHARGE), 0.0, 1.0)
+## Nearest living Hunter within reach and on the side we are facing. Prediction
+## only — the server runs the same test and its answer is the one that counts.
+func _find_target_hunter(gm: Node) -> Node2D:
 	var facing := -1.0 if body.sprite.flip_h else 1.0
-	body.velocity = Vector2(facing * lerpf(POUNCE_VX_MIN, POUNCE_VX_MAX, power), POUNCE_VY)
-	pouncing = true
-	body.animator.lunge()                 # arms out, reaching through the arc
+	var best: Node2D = null
+	var best_d := INF
+	for c in gm.players().get_children():
+		if c.get("role") != Roles.HUNTER or c.get("dead"):
+			continue
+		var to: Vector2 = c.global_position - body.global_position
+		if signf(to.x) != facing and absf(to.x) > 4.0:
+			continue                 # behind us (the epsilon keeps point-blank working)
+		var d := to.length()
+		if d <= KILL_RANGE and d < best_d:
+			best_d = d
+			best = c
+	return best
 
-## Airborne pounce physics (replaces normal movement while pouncing): fall under
-## gravity, and either snag a catchable Runner on contact (starts the grab) or eat
-## a landing stiff when the leap comes down on nothing.
-func pounce_step(delta: float) -> void:
-	body.velocity.y += body.get_gravity().y * delta
-	body.move_and_slide()
-	if _pounce_touching_runner():
-		body.gm.hunter_press.rpc_id(1)    # touched the Runner mid-flight: server starts the mash-off
-		pouncing = false
-		# Dump the leap momentum on contact. apply_snap only closes the horizontal gap,
-		# so leftover velocity would otherwise carry us past the Runner and hold us
-		# above it for the rest of the arc instead of dropping into the lock.
-		body.velocity = Vector2.ZERO
+## Hunter F: one knock per press. Play the swing locally right away so the tap
+## feels immediate, forward it, and lock into a recovery.
+func _hunter_input(gm: Node) -> void:
+	if body.dead or _stiff_left > 0.0:
 		return
-	if body.is_on_floor() and body.velocity.y >= 0.0:
-		pouncing = false
-		_stiff_left = POUNCE_LAND_STIFF   # came down on nothing: recovery window
+	if not Input.is_action_just_pressed("attack"):
+		return
+	body.animator.knock()
+	gm.hunter_press.rpc_id(1)
+	_stiff_left = KNOCK_HIT_STIFF if _knock_would_hit(gm) else KNOCK_WHIFF_STIFF
 
-## Mid-flight snag test: the leap connects when the two bodies actually touch, a
-## far tighter window than the standing grab's capture_range. Capturability is the
-## server's call (game_manager.hunter_press) — this only decides "did we hit it".
-func _pounce_touching_runner() -> bool:
-	var r := _find_runner(body.gm)
-	return r != null and body.global_position.distance_to(r.global_position) <= POUNCE_CONTACT
+## Server confirmed a kill: start the local cooldown mirror. Driven from the
+## server rather than from the press so a rejected swing never costs the Runner.
+func start_attack_cd() -> void:
+	_attack_cd_left = ATTACK_CD
 
-## Client-side prediction of the server's grab test (range + a capturable Runner),
-## used only to decide whether this lunge whiffs and eats the stiff.
-func _grab_would_hit(gm: Node) -> bool:
+## Client-side prediction of the server's range test, used only to choose the
+## recovery length. The server decides whether the knock actually lands.
+func _knock_would_hit(gm: Node) -> bool:
 	var r := _find_runner(gm)
-	return r != null and r.capturable \
-		and body.global_position.distance_to(r.global_position) <= gm.capture_range
+	return r != null \
+		and body.global_position.distance_to(r.global_position) <= KnockSystem.KNOCK_RANGE
 
 func _find_runner(gm: Node) -> Node2D:
 	if _runner_ref != null and is_instance_valid(_runner_ref):
@@ -169,16 +161,3 @@ func _find_runner(gm: Node) -> Node2D:
 			_runner_ref = c
 			return c
 	return null
-
-## Nearest living Hunter, for the Runner to lean into during a grapple.
-func _find_hunter(gm: Node) -> Node2D:
-	var best: Node2D = null
-	var best_d := INF
-	for c in gm.players().get_children():
-		if c.get("role") != Roles.HUNTER or c.get("dead"):
-			continue
-		var d: float = body.global_position.distance_to(c.global_position)
-		if d < best_d:
-			best_d = d
-			best = c
-	return best
