@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate scenes/player_frames.tres — the shared SpriteFrames for players.
+"""Generate scenes/resources/player_frames.tres — the shared SpriteFrames for players.
 
 Both Runner and Hunter use this single humanoid sheet (differentiated at
 runtime by tint). Edit the ANIMS table and re-run to add/adjust animations:

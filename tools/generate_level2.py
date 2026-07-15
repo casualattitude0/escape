@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Generate scenes/level2.tscn — a SECOND map for the game, skinned with the
-sci-fi panel tileset (scenes/terrain2_tileset.tres, built from Terrain.png).
+"""Generate scenes/levels/level2.tscn — a SECOND map for the game, skinned with the
+sci-fi panel tileset (scenes/resources/terrain2_tileset.tres, built from Terrain.png).
 
 The layout is a horizontal mirror of the proven map in generate_level.py. A
 mirror preserves every jump distance and every room-to-room opening exactly, so

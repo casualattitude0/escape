@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate scenes/level.tscn — Metroid Dread-style asymmetric map.
+"""Generate scenes/levels/level.tscn — Metroid Dread-style asymmetric map.
 
 Layout (tile grid 100x60, 32px tiles, y down):
 

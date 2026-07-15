@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate scenes/fx_frames.tres — the shared SpriteFrames for one-shot FX
+"""Generate scenes/resources/fx_frames.tres — the shared SpriteFrames for one-shot FX
 (dust puffs). All players' Effects nodes share this single sheet. Edit the
 ANIMS table and re-run to add/adjust FX:
 
@@ -7,7 +7,7 @@ ANIMS table and re-run to add/adjust FX:
 
 Each entry: (anim_name, folder, file_prefix, frame_count, speed_fps).
 FX anims always loop=false (they play once and the node frees itself on
-`animation_finished` — see scenes/dust.tscn).
+`animation_finished` — see scenes/fx/dust.tscn).
 Frames are expected at res://sprites/Sprites/FX/<folder>/<file_prefix><NN>.png
 (1-based, 2 digits).
 """
