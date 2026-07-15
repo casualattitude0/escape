@@ -449,9 +449,9 @@ func _build_local_panel() -> Control:
 	grid.add_child(players_col)
 	box.add_child(grid)
 
-	var spawn_btn := _button("Spawn Local Host", CANDY_GREEN, PAPER, _f_hand, 20, 20, 12, 9)
+	var spawn_btn := _button("Host", CANDY_GREEN, PAPER, _f_hand, 20, 20, 12, 9)
 	spawn_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spawn_btn.pressed.connect(_on_host_lan)
+	spawn_btn.pressed.connect(_on_quick_host_join)
 	box.add_child(spawn_btn)
 
 	box.add_child(_divider())
@@ -484,9 +484,6 @@ func _build_local_panel() -> Control:
 	box.add_child(_field_label("Quick Dev"))
 	var quick := HBoxContainer.new()
 	quick.add_theme_constant_override("separation", 10)
-	var hj := _button("Host + Join Self", CANDY_GREEN, PAPER, _f_hand, 15, 14, 8, 9)
-	hj.pressed.connect(_on_quick_host_join)
-	quick.add_child(hj)
 	var rc := _button("Reconnect", PAPER, INK, _f_hand, 15, 14, 8, 9)
 	rc.pressed.connect(_on_quick_reconnect)
 	quick.add_child(rc)
