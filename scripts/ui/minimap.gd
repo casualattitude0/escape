@@ -36,8 +36,8 @@ var _ping_pos := Vector2.ZERO
 var _ping_left := 0.0
 var _time := 0.0                # free-running clock for marker pulses
 var _map_tex: ImageTexture     # baked silhouette of the level geometry
-var _items_root: Node          # runner: live container of key objects
-var _doors_root: Node          # runner: live container of escape doors
+var _devices_root: Node        # runner: live container of sabotage devices
+var _escape_root: Node         # runner: live container of the escape point
 
 func _ready() -> void:
 	_me = str(multiplayer.get_unique_id())
@@ -50,10 +50,10 @@ func _ready() -> void:
 			_gm.sound_heard.connect(_on_sound_heard)
 	var scene := get_tree().current_scene
 	if scene != null and _is_runner:
-		# Objects and doors are added to these roots after the layout rpc runs;
+		# Devices and the exit are added to these roots after the layout rpc runs;
 		# we hold the container and read its children live each frame.
-		_items_root = scene.get_node_or_null("Items")
-		_doors_root = scene.get_node_or_null("Doors")
+		_devices_root = scene.get_node_or_null("Devices")
+		_escape_root = scene.get_node_or_null("Escape")
 	_bake_map()
 
 ## Render the Terrain's solid cells into a small texture once, so the minimap
@@ -99,33 +99,33 @@ func _draw() -> void:
 	else:
 		_draw_hunter()
 
-## Runner view: objectives (uncollected objects, escape doors) plus own marker.
+## Runner view: objectives (devices left to break, the exit) plus own marker.
 func _draw_runner() -> void:
 	var pulse := 0.5 + 0.5 * sin(_time * 5.0)
-	if _doors_root != null and _gm != null:
-		var per: int = _gm.per_door()
-		for d in _doors_root.get_children():
+	if _escape_root != null and _gm != null:
+		var open: bool = _gm.escape_open()
+		for d in _escape_root.get_children():
 			if d is Node2D:
-				var installed: int = _gm.door_installs(d.index)
-				var col := COL_DOOR_LOCKED
-				if installed >= per:
-					col = COL_DOOR_OPEN
-				elif installed > 0:
-					col = COL_DOOR_PARTIAL
+				# Shut until every device is down, so it is only ever locked or open.
+				var col := COL_DOOR_OPEN if open else COL_DOOR_LOCKED
 				var at := _world_to_map(d.global_position)
 				var s := 5.0
 				draw_rect(Rect2(at - Vector2(s, s), Vector2(s, s) * 2.0), col)
-				if installed >= per:
+				if open:
 					draw_rect(Rect2(at - Vector2(s, s), Vector2(s, s) * 2.0), col.lightened(0.4), false, 1.5)
-	if _items_root != null:
-		for it in _items_root.get_children():
-			# Carrying/installing a key hides it on every peer (Item.set_held); a
-			# hidden key is in hand or already delivered, so it drops off the map.
-			if it is Node2D and it.visible:
-				var col := COL_KEY
-				var at := _world_to_map(it.global_position)
-				draw_circle(at, lerp(2.5, 4.5, pulse), col)
-				draw_arc(at, 6.0, 0.0, TAU, 20, Color(col.r, col.g, col.b, 0.5 * (1.0 - pulse)), 1.5)
+	if _devices_root != null and _gm != null:
+		for it in _devices_root.get_children():
+			if not (it is Node2D):
+				continue
+			# A broken device is no longer a destination, so it leaves the map.
+			if _gm.device_done(it.index):
+				continue
+			# Damaged devices warm toward amber, so a half-done one reads as
+			# "come back to this" at a glance.
+			var col := COL_KEY.lerp(COL_DOOR_PARTIAL, _gm.device_ratio(it.index))
+			var at := _world_to_map(it.global_position)
+			draw_circle(at, lerp(2.5, 4.5, pulse), col)
+			draw_arc(at, 6.0, 0.0, TAU, 20, Color(col.r, col.g, col.b, 0.5 * (1.0 - pulse)), 1.5)
 	if _players != null:
 		for c in _players.get_children():
 			if c.name == _me:
