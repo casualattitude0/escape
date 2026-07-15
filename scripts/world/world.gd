@@ -52,6 +52,12 @@ func _ready() -> void:
 		# the level. Discard it and start a fresh round instead.
 		if not _resume.is_empty() and _resume.get("terrain_sig") != _terrain_signature():
 			_resume = {}
+		# A snapshot saved after the match already ended (a winner was decided)
+		# has no in-progress round left to continue — resuming it just replays
+		# stale positions from when the round finished. Only meant to pick a
+		# live/unfinished round back up, so discard it too.
+		if not _resume.is_empty() and String(_resume.get("gm", {}).get("winner", "")) != "":
+			_resume = {}
 		_ready_peers[1] = true
 		multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 		_try_spawn_all()
