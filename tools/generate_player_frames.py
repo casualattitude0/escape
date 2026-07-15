@@ -30,7 +30,7 @@ ANIMS = [
     # --- combat / capture (GDD 4.4 / 4.5) -----------------------------------
     ("attack",   "Sprites/Combat/Punch01", "Punch01",         6, False, 16.0),  # Runner melee
     ("grab",     "Sprites/InteractionPull","InteractionPull", 6, False, 12.0),  # Hunter suppression: lunge then hold
-    ("struggle", "Sprites/Combat/Stunned", "Stunned",         7, True,  10.0),  # Runner being suppressed
+    ("struggle", "Sprites/Combat/ShockHeavy", "ShockHeavy",   4, True,  16.0),  # Runner thrashing to break the grip
     ("push",     "Sprites/Push",           "Push",            8, True,  14.0),  # Hunter shoving during the mash-off
     ("pull",     "Sprites/Pull",           "Pull",            6, True,  14.0),  # Runner heaving away during the mash-off
     ("faint",    "Sprites/Knockback",      "Knockback",       6, False, 12.0),  # Hunter dazed after a Runner escapes its grip

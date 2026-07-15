@@ -76,8 +76,10 @@ func _pick_anim(loco: String) -> String:
 	if body.combat.pouncing:
 		return Anim.GRAB              # arms out, reaching through the pounce arc
 	if body.combat.grappling:
-		# The Hunter grabs and holds; the Runner struggles in its grip.
-		return Anim.STRUGGLE if body.role == Roles.RUNNER else Anim.GRAB
+		# The mash-off is a tug-of-war, so both fighters play a looping heave that
+		# pulse() restarts on every tap. GRAB is deliberately not used here: it is a
+		# one-shot lunge that holds its final frame, which froze the Hunter mid-grapple.
+		return Anim.STRUGGLE if body.role == Roles.RUNNER else Anim.PUSH
 	if body.combat.stiff_active():
 		return Anim.GRAB              # Hunter's grab lunge and its miss recovery
 	if body.movement.exit_stun_active():
@@ -139,11 +141,11 @@ func pulse() -> void:
 		sprite.play(sprite.animation)
 		sprite.frame = 0
 
-## True when this player is shown locked in the mash-off. The push/pull anim is
-## the reliable, peer-agnostic tell, so this works the same on the owner and on
-## remote copies.
+## True when this player is shown locked in the mash-off. The heave anim is the
+## reliable, peer-agnostic tell, so this works the same on the owner and on remote
+## copies. GRAB is excluded: it means a lunge or pounce reach, not the mash-off.
 func _grappling() -> bool:
-	return sprite.animation == Anim.GRAB or sprite.animation == Anim.STRUGGLE
+	return sprite.animation == Anim.PUSH or sprite.animation == Anim.STRUGGLE
 
 ## Connect once to the GameManager so an opponent's tap (a bump in the replicated
 ## capture/escape bars) replays this player's heave too — so both fighters react.

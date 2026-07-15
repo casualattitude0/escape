@@ -1,4 +1,4 @@
-[gd_resource type="SpriteFrames" load_steps=118 format=3]
+[gd_resource type="SpriteFrames" load_steps=115 format=3]
 
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Idle/Idle01.png" id="1"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/Idle/Idle02.png" id="2"]
@@ -81,42 +81,39 @@
 [ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull04.png" id="79"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull05.png" id="80"]
 [ext_resource type="Texture2D" path="res://sprites/Sprites/InteractionPull/InteractionPull06.png" id="81"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned01.png" id="82"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned02.png" id="83"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned03.png" id="84"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned04.png" id="85"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned05.png" id="86"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned06.png" id="87"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/Stunned/Stunned07.png" id="88"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push01.png" id="89"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push02.png" id="90"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push03.png" id="91"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push04.png" id="92"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push05.png" id="93"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push06.png" id="94"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push07.png" id="95"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push08.png" id="96"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull01.png" id="97"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull02.png" id="98"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull03.png" id="99"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull04.png" id="100"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull05.png" id="101"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull06.png" id="102"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback01.png" id="103"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback02.png" id="104"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback03.png" id="105"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback04.png" id="106"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback05.png" id="107"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback06.png" id="108"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die01.png" id="109"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die02.png" id="110"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die03.png" id="111"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die04.png" id="112"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die05.png" id="113"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die06.png" id="114"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die07.png" id="115"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die08.png" id="116"]
-[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die09.png" id="117"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/ShockHeavy/ShockHeavy01.png" id="82"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/ShockHeavy/ShockHeavy02.png" id="83"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/ShockHeavy/ShockHeavy03.png" id="84"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Combat/ShockHeavy/ShockHeavy04.png" id="85"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push01.png" id="86"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push02.png" id="87"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push03.png" id="88"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push04.png" id="89"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push05.png" id="90"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push06.png" id="91"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push07.png" id="92"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Push/Push08.png" id="93"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull01.png" id="94"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull02.png" id="95"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull03.png" id="96"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull04.png" id="97"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull05.png" id="98"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Pull/Pull06.png" id="99"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback01.png" id="100"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback02.png" id="101"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback03.png" id="102"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback04.png" id="103"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback05.png" id="104"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Knockback/Knockback06.png" id="105"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die01.png" id="106"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die02.png" id="107"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die03.png" id="108"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die04.png" id="109"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die05.png" id="110"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die06.png" id="111"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die07.png" id="112"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die08.png" id="113"]
+[ext_resource type="Texture2D" path="res://sprites/Sprites/Die/Die09.png" id="114"]
 
 [resource]
 animations = [{
@@ -523,8 +520,12 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("85")
-},
-{
+}],
+"loop": true,
+"name": &"struggle",
+"speed": 16.0
+}, {
+"frames": [{
 "duration": 1.0,
 "texture": ExtResource("86")
 },
@@ -535,12 +536,8 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("88")
-}],
-"loop": true,
-"name": &"struggle",
-"speed": 10.0
-}, {
-"frames": [{
+},
+{
 "duration": 1.0,
 "texture": ExtResource("89")
 },
@@ -559,8 +556,12 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("93")
-},
-{
+}],
+"loop": true,
+"name": &"push",
+"speed": 14.0
+}, {
+"frames": [{
 "duration": 1.0,
 "texture": ExtResource("94")
 },
@@ -571,12 +572,8 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("96")
-}],
-"loop": true,
-"name": &"push",
-"speed": 14.0
-}, {
-"frames": [{
+},
+{
 "duration": 1.0,
 "texture": ExtResource("97")
 },
@@ -587,8 +584,12 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("99")
-},
-{
+}],
+"loop": true,
+"name": &"pull",
+"speed": 14.0
+}, {
+"frames": [{
 "duration": 1.0,
 "texture": ExtResource("100")
 },
@@ -599,12 +600,8 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("102")
-}],
-"loop": true,
-"name": &"pull",
-"speed": 14.0
-}, {
-"frames": [{
+},
+{
 "duration": 1.0,
 "texture": ExtResource("103")
 },
@@ -615,8 +612,12 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("105")
-},
-{
+}],
+"loop": false,
+"name": &"faint",
+"speed": 12.0
+}, {
+"frames": [{
 "duration": 1.0,
 "texture": ExtResource("106")
 },
@@ -627,12 +628,8 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("108")
-}],
-"loop": false,
-"name": &"faint",
-"speed": 12.0
-}, {
-"frames": [{
+},
+{
 "duration": 1.0,
 "texture": ExtResource("109")
 },
@@ -655,18 +652,6 @@ animations = [{
 {
 "duration": 1.0,
 "texture": ExtResource("114")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("115")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("116")
-},
-{
-"duration": 1.0,
-"texture": ExtResource("117")
 }],
 "loop": false,
 "name": &"die",
