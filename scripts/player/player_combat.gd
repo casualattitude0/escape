@@ -17,7 +17,8 @@ const POUNCE_MIN_CHARGE := 0.12   # hold shorter than this -> a plain tap grab, 
 const POUNCE_MAX_CHARGE := 0.5    # charge saturates here
 const POUNCE_VX_MIN := 240.0      # launch speed at min charge
 const POUNCE_VX_MAX := 430.0      # launch speed at full charge
-const POUNCE_VY := -360.0         # upward kick of the leap arc
+const POUNCE_VY := -175.0         # upward kick of the leap arc: low and flat, not a high hop
+const POUNCE_CONTACT := 26.0      # bodies-touching radius that snags a Runner mid-flight
 const POUNCE_LAND_STIFF := 0.5    # recovery lockout after a pounce lands on nothing
 
 @onready var body: CharacterBody2D = get_parent()
@@ -127,13 +128,24 @@ func _start_pounce(gm: Node) -> void:
 func pounce_step(delta: float) -> void:
 	body.velocity.y += body.get_gravity().y * delta
 	body.move_and_slide()
-	if _grab_would_hit(body.gm):
-		body.gm.hunter_press.rpc_id(1)    # pounced onto the Runner: server starts the grab
+	if _pounce_touching_runner():
+		body.gm.hunter_press.rpc_id(1)    # touched the Runner mid-flight: server starts the mash-off
 		pouncing = false
+		# Dump the leap momentum on contact. apply_snap only closes the horizontal gap,
+		# so leftover velocity would otherwise carry us past the Runner and hold us
+		# above it for the rest of the arc instead of dropping into the lock.
+		body.velocity = Vector2.ZERO
 		return
 	if body.is_on_floor() and body.velocity.y >= 0.0:
 		pouncing = false
 		_stiff_left = POUNCE_LAND_STIFF   # came down on nothing: recovery window
+
+## Mid-flight snag test: the leap connects when the two bodies actually touch, a
+## far tighter window than the standing grab's capture_range. Capturability is the
+## server's call (game_manager.hunter_press) — this only decides "did we hit it".
+func _pounce_touching_runner() -> bool:
+	var r := _find_runner(body.gm)
+	return r != null and body.global_position.distance_to(r.global_position) <= POUNCE_CONTACT
 
 ## Client-side prediction of the server's grab test (range + a capturable Runner),
 ## used only to decide whether this lunge whiffs and eats the stiff.
