@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/test_rpc_call_local.gd" id="1"]
+
+[node name="TestRpcCallLocal" type="Node"]
+script = ExtResource("1")
