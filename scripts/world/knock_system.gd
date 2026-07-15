@@ -25,7 +25,7 @@ const IFRAME_TIME := 1.20        # invulnerable for this long after each knock
 const KNOCK_DECAY := 4.0         # no new knock for this long -> the count resets
 const STUN_TIME := 2.50          # how long a stunned Runner is frozen
 const KNOCK_RANGE := 64.0        # how close a Hunter must be to knock (~2 tiles)
-const KNOCKBACK_VX := 320.0      # horizontal kick, aimed along the knocker's facing
+const KNOCKBACK_VX := 480.0      # horizontal kick, aimed along the knocker's facing
 
 var knocks := 0                  # 0..KNOCKS_TO_STUN-1 (a full count stuns and resets)
 var iframe_left := 0.0

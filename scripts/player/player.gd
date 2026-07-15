@@ -10,7 +10,7 @@ extends CharacterBody2D
 
 const STUN_DRAG := 900.0     # how fast a stunned Runner's knockback slide bleeds off
 const KNOCK_HOP := -90.0     # small pop on a knock so the kick reads as a hit, not a nudge
-const KNOCK_STAGGER := 0.22  # Runner: no steering right after a knock, so the shove lands
+const KNOCK_STAGGER := 0.38  # Runner: no steering right after a knock, so the shove lands
 
 @onready var sprite: AnimatedSprite2D = $SpritePivot/AnimatedSprite2D
 @onready var camera: Camera2D = $Camera2D
