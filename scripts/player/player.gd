@@ -76,8 +76,15 @@ func _physics_process(delta: float) -> void:
 
 	movement.update_tunnel(delta)
 	combat.tick_stiff(delta)
-	var immobile := combat.stiff_active() or combat.stagger_active() \
-		or movement.exit_stun_active()
+
+	if combat.stagger_active():
+		velocity.y += get_gravity().y * delta
+		velocity.x = move_toward(velocity.x, 0.0, STUN_DRAG * delta)
+		move_and_slide()
+		animator.publish(delta)
+		return
+
+	var immobile := combat.stiff_active() or movement.exit_stun_active()
 
 	movement.tick(delta, not immobile)
 	effects.camera_juice(delta)   # lookahead + landing shake: real velocity, owner only

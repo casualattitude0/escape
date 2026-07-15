@@ -58,10 +58,6 @@ func _refresh() -> void:
 	items_label.modulate = Color(1, 0, 0)
 
 	var live: bool = _gm.winner == ""
-	capture_bar.value = _gm.knock_ratio() * 100.0
-	# Dim the meter through the invulnerability window so both sides can read the
-	# one mechanic that is otherwise invisible: right now, knocks do not land.
-	capture_bar.modulate = Color(0.45, 0.45, 0.45) if _gm.runner_iframe() else Color(1, 1, 1)
 
 	# Sabotage progress of whatever the Runner is breaking, shown to everyone: the
 	# Hunters need it to judge whether they still have time to get there.

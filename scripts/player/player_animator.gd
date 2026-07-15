@@ -23,9 +23,18 @@ const SABOTAGE_LOCK_TIME := 4.0 / 18.0 # Sabotage: 4 frames @ 18fps
 const FLICKER_PERIOD := 0.16
 const FLICKER_ALPHA := 0.35
 
+const DOT_OFF := Color(0.4, 0.4, 0.4, 1.0)
+const DOT_ON := Color(1.0, 0.15, 0.15, 1.0)
+
 @onready var body: CharacterBody2D = get_parent()
 @onready var sprite: AnimatedSprite2D = body.get_node("SpritePivot/AnimatedSprite2D")
 @onready var name_tag: Label = body.get_node("NameTag")
+@onready var knock_dots: Node2D = body.get_node("KnockDots")
+@onready var _dots: Array[Label] = [
+	body.get_node("KnockDots/Dot0"),
+	body.get_node("KnockDots/Dot1"),
+	body.get_node("KnockDots/Dot2"),
+]
 
 var _shown_role: String = ""
 var _prev_knocks := 0            # last seen knock count, to catch a knock landing
@@ -172,8 +181,8 @@ func _on_state_changed() -> void:
 		return
 	var n: int = body.gm.knock_count()
 	_prev_knocks = n
+	_refresh_dots(n)
 
-	# The third knock: play the fall once, then hold the lying pose for the stun.
 	var st: bool = body.gm.runner_stunned()
 	if st and not _prev_stunned:
 		_knockback_lock = KNOCKBACK_LOCK_TIME
@@ -183,3 +192,8 @@ func _on_state_changed() -> void:
 	if d > _prev_destroyed:
 		_slam_lock = SLAM_LOCK_TIME
 	_prev_destroyed = d
+
+func _refresh_dots(n: int) -> void:
+	knock_dots.visible = (n > 0)
+	for i in _dots.size():
+		_dots[i].add_theme_color_override("font_color", DOT_ON if i < n else DOT_OFF)

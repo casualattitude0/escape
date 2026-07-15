@@ -93,34 +93,17 @@ theme_override_colors/font_color = Color(1, 0, 0, 1)
 
 [node name="CaptureLabel" type="Label" parent="HUD" unique_id=1075525060]
 unique_name_in_owner = true
-offset_left = 16.0
-offset_top = 104.0
-offset_right = 260.0
-offset_bottom = 128.0
-theme_override_colors/font_color = Color(1, 0, 0, 1)
-text = "Knocked"
+visible = false
 
 [node name="CaptureBar" type="ProgressBar" parent="HUD" unique_id=452403102]
 unique_name_in_owner = true
-offset_left = 16.0
-offset_top = 130.0
-offset_right = 260.0
-offset_bottom = 152.0
-show_percentage = false
+visible = false
 
 [node name="Tick1" type="ColorRect" parent="HUD" unique_id=257229199]
-offset_left = 97.0
-offset_top = 130.0
-offset_right = 99.0
-offset_bottom = 152.0
-color = Color(0.1, 0.1, 0.12, 1)
+visible = false
 
 [node name="Tick2" type="ColorRect" parent="HUD" unique_id=51456384]
-offset_left = 179.0
-offset_top = 130.0
-offset_right = 181.0
-offset_bottom = 152.0
-color = Color(0.1, 0.1, 0.12, 1)
+visible = false
 
 [node name="EscapeLabel" type="Label" parent="HUD" unique_id=1387255929]
 unique_name_in_owner = true

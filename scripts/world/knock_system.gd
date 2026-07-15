@@ -21,7 +21,7 @@ class_name KnockSystem
 ## checkpoints. Decay replaces that — progress is meant to be lost.
 
 const KNOCKS_TO_STUN := 3
-const IFRAME_TIME := 1.20        # invulnerable for this long after each knock
+const IFRAME_TIME := 1.20        # invulnerable after getting up from a stun
 const KNOCK_DECAY := 4.0         # no new knock for this long -> the count resets
 const STUN_TIME := 2.50          # how long a stunned Runner is frozen
 const KNOCK_RANGE := 64.0        # how close a Hunter must be to knock (~2 tiles)
@@ -47,7 +47,9 @@ func tick(delta: float) -> bool:
 		changed = changed or iframe_left <= 0.0     # window closed: knocks land again
 	if stun_left > 0.0:
 		stun_left = maxf(0.0, stun_left - delta)
-		changed = changed or stun_left <= 0.0       # the Runner is free again
+		if stun_left <= 0.0:
+			iframe_left = IFRAME_TIME
+			changed = true
 	if decay_left > 0.0:
 		decay_left = maxf(0.0, decay_left - delta)
 		if decay_left <= 0.0 and knocks > 0:
@@ -77,7 +79,6 @@ func can_knock() -> bool:
 ## Land one knock. Returns true when this was the third (the Runner is stunned).
 func add_knock() -> bool:
 	knocks += 1
-	iframe_left = IFRAME_TIME
 	decay_left = KNOCK_DECAY
 	if knocks >= KNOCKS_TO_STUN:
 		knocks = 0
