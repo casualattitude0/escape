@@ -12,15 +12,31 @@ const HUNTER_COL := Color(1.0, 0.55, 0.55)
 # lock releases right as the animation would naturally finish.
 const LAND_LOCK_TIME := 2.0 / 16.0      # Land: 2 frames @ 16fps
 const RUN_STOP_LOCK_TIME := 3.0 / 14.0  # RunToIdle: 3 frames @ 14fps
+const KNOCKBACK_LOCK_TIME := 6.0 / 12.0 # Knockback: 6 frames @ 12fps
+const SLAM_LOCK_TIME := 10.0 / 14.0     # GroundSlam: 10 frames @ 14fps
+const ATTACK_LOCK_TIME := 6.0 / 16.0   # Attack: 6 frames @ 16fps
+const SABOTAGE_LOCK_TIME := 4.0 / 18.0 # Sabotage: 4 frames @ 18fps
+
+# Invulnerability flicker (GDD 6.5 lists this as a missing tell). One full
+# on/off cycle per FLICKER_PERIOD; the Runner never fully disappears, or it would
+# be unreadable exactly when the Hunters are trying to track it.
+const FLICKER_PERIOD := 0.16
+const FLICKER_ALPHA := 0.35
 
 @onready var body: CharacterBody2D = get_parent()
 @onready var sprite: AnimatedSprite2D = body.get_node("SpritePivot/AnimatedSprite2D")
 @onready var name_tag: Label = body.get_node("NameTag")
 
 var _shown_role: String = ""
-var _prev_cap := 0.0             # last seen bar values, to detect a fresh mash tap
-var _prev_esc := 0.0
+var _prev_knocks := 0            # last seen knock count, to catch a knock landing
+var _prev_stunned := false       # last seen stun state, to catch the third knock
+var _prev_destroyed := 0         # last seen device count, to catch one breaking
 var _hooked := false
+
+var _knockback_lock := 0.0       # counts down while the kick-away tumble plays
+var _slam_lock := 0.0            # counts down while the device-broken flourish plays
+var _attack_lock := 0.0          # counts down while the Runner's kill swing plays
+var _sabotage_lock := 0.0        # counts down while the Runner's sabotage swing plays
 
 var _land_lock_left := 0.0       # counts down while LAND is forced over locomotion
 var _run_stop_lock_left := 0.0   # counts down while RUN_STOP is forced over locomotion
@@ -40,18 +56,20 @@ func render() -> void:
 ## fixed duration regardless of how fast locomotion_anim() changes underneath).
 func publish(delta: float) -> void:
 	var dir: float = body.movement.last_dir
-	if body.combat.grappling:
-		_face_opponent()                 # tug-of-war: orient toward the other fighter
-	elif body.movement.sliding:
+	if body.movement.sliding:
 		pass                              # locked facing: don't flip mid-slide
 	elif dir != 0.0:
 		sprite.flip_h = dir < 0.0
 
 	_land_lock_left = maxf(_land_lock_left - delta, 0.0)
 	_run_stop_lock_left = maxf(_run_stop_lock_left - delta, 0.0)
+	_knockback_lock = maxf(_knockback_lock - delta, 0.0)
+	_slam_lock = maxf(_slam_lock - delta, 0.0)
+	_attack_lock = maxf(_attack_lock - delta, 0.0)
+	_sabotage_lock = maxf(_sabotage_lock - delta, 0.0)
 
 	var loco: String = body.movement.locomotion_anim()
-	if body.movement.just_landed and not body.combat.grappling:
+	if body.movement.just_landed:
 		# Landing always wins: cancel any pending run-stop so LAND reads clearly.
 		_land_lock_left = LAND_LOCK_TIME
 		_run_stop_lock_left = 0.0
@@ -71,17 +89,18 @@ func publish(delta: float) -> void:
 func _pick_anim(loco: String) -> String:
 	if body.dead:
 		return Anim.DIE
-	if body.fainted:
-		return Anim.FAINT             # dazed on the ground after losing the grip
-	if body.combat.pouncing:
-		return Anim.GRAB              # arms out, reaching through the pounce arc
-	if body.combat.grappling:
-		# The mash-off is a tug-of-war, so both fighters play a looping heave that
-		# pulse() restarts on every tap. GRAB is deliberately not used here: it is a
-		# one-shot lunge that holds its final frame, which froze the Hunter mid-grapple.
-		return Anim.STRUGGLE if body.role == Roles.RUNNER else Anim.PUSH
+	if body.stunned:
+		# Only the third knock puts the Runner down: it gets knocked off its feet
+		# (KNOCKBACK, once) and then lies there (STUNNED, looping).
+		return Anim.KNOCKBACK if _knockback_lock > 0.0 else Anim.STUNNED
+	if _slam_lock > 0.0:
+		return Anim.SLAM              # Runner: a device just came apart
+	if _attack_lock > 0.0:
+		return Anim.ATTACK            # Runner: kill swing playing out
+	if _sabotage_lock > 0.0:
+		return Anim.SABOTAGE          # Runner: sabotage swing playing out
 	if body.combat.stiff_active():
-		return Anim.GRAB              # Hunter's grab lunge and its miss recovery
+		return Anim.KNOCK             # Hunter's knock swing and its miss recovery
 	if body.movement.exit_stun_active():
 		return Anim.ROLL              # tunnel exit stiffness reads as a tumble-recovery
 	if _land_lock_left > 0.0:
@@ -90,30 +109,6 @@ func _pick_anim(loco: String) -> String:
 		return Anim.RUN_STOP
 	return loco
 
-## Point the sprite at the other fighter for the mash-off. Both mash-off sprites
-## (Hunter push, Runner pull) reach toward the right by default, so both roles
-## face the opponent the same way: only flip when the opponent is to the left.
-func _face_opponent() -> void:
-	var other := _grapple_opponent()
-	if other == null:
-		return
-	sprite.flip_h = other.global_position.x < body.global_position.x
-
-func _grapple_opponent() -> Node2D:
-	if body.gm == null:
-		return null
-	var want := Roles.HUNTER if body.role == Roles.RUNNER else Roles.RUNNER
-	var best: Node2D = null
-	var best_d := INF
-	for c in body.gm.players().get_children():
-		if c.get("role") != want or c.get("dead"):
-			continue
-		var d: float = body.global_position.distance_to(c.global_position)
-		if d < best_d:
-			best_d = d
-			best = c
-	return best
-
 func _apply_visual() -> void:
 	if body.role != _shown_role:
 		_shown_role = body.role
@@ -121,34 +116,51 @@ func _apply_visual() -> void:
 		name_tag.text = base + (" (You)" if body.is_multiplayer_authority() else "")
 		name_tag.modulate = RUNNER_COL if body.role == Roles.RUNNER else HUNTER_COL
 	if body.role == Roles.RUNNER:
-		sprite.modulate = Color(1, 1, 1)
+		sprite.modulate = Color(1, 1, 1, _iframe_alpha())
 	else:
 		sprite.modulate = Color(0.5, 0.32, 0.32) if body.dead else HUNTER_COL
 
-## Immediate feedback the instant a Hunter lunges for a grab: snap into the grab
-## reach from frame 0 and publish it so remote copies see the lunge right away.
-func lunge() -> void:
-	sprite.play(Anim.GRAB)
+## Blink the Runner while it cannot be knocked. Both sides need this: the Runner
+## learns the shove was not its fault, and the Hunters learn that swinging right
+## now is wasted — the iframe is otherwise completely invisible.
+##
+## Driven off the replicated iframe flag, so every peer flickers together, and
+## timed off the wall clock rather than a physics accumulator: this is cosmetic
+## only, so it does not need to obey the simulation's clock, and this way it does
+## not have to be threaded through render().
+func _iframe_alpha() -> float:
+	if body.gm == null or not body.gm.runner_iframe():
+		return 1.0
+	var t := fmod(Time.get_ticks_msec() / 1000.0, FLICKER_PERIOD)
+	return FLICKER_ALPHA if t < FLICKER_PERIOD * 0.5 else 1.0
+
+## Restart `anim` from frame 0 and publish it immediately. Replaying from the top
+## on every press is what makes a mashed key read as a mash rather than a single
+## held pose. Called from PlayerCombat on the frame the key goes down.
+func _pulse(anim: String) -> void:
+	sprite.play(anim)
 	sprite.frame = 0
-	body.net_anim = Anim.GRAB
+	body.net_anim = anim
 	body.net_flip = sprite.flip_h
 
-## Immediate feedback for a mash tap on the LOCAL player: replay the push/pull
-## from the top so each key press lands a fresh, visible heave. Called from
-## PlayerCombat the moment the mash key is pressed.
-func pulse() -> void:
-	if _grappling():
-		sprite.play(sprite.animation)
-		sprite.frame = 0
+## The Hunter's knock swing.
+func knock() -> void:
+	_pulse(Anim.KNOCK)
 
-## True when this player is shown locked in the mash-off. The heave anim is the
-## reliable, peer-agnostic tell, so this works the same on the owner and on remote
-## copies. GRAB is excluded: it means a lunge or pounce reach, not the mash-off.
-func _grappling() -> bool:
-	return sprite.animation == Anim.PUSH or sprite.animation == Anim.STRUGGLE
+## The Runner's kill swing.
+func attack() -> void:
+	_attack_lock = ATTACK_LOCK_TIME
+	_pulse(Anim.ATTACK)
 
-## Connect once to the GameManager so an opponent's tap (a bump in the replicated
-## capture/escape bars) replays this player's heave too — so both fighters react.
+## The Runner's sabotage swing. Restarting from frame 0 on every tap is what makes
+## the mash read as a mash rather than one long held pose.
+func sabotage() -> void:
+	_sabotage_lock = SABOTAGE_LOCK_TIME
+	_pulse(Anim.SABOTAGE)
+
+## Connect once to the GameManager so a knock landing replays the Runner's
+## reaction. This hangs off the REPLICATED knock count rather than local input, so
+## the reaction shows on every peer and on the Runner who did not press anything.
 func _hook_taps() -> void:
 	if _hooked or body.gm == null:
 		return
@@ -156,11 +168,18 @@ func _hook_taps() -> void:
 	body.gm.state_changed.connect(_on_state_changed)
 
 func _on_state_changed() -> void:
-	if body.gm == null:
+	if body.gm == null or body.role != Roles.RUNNER:
 		return
-	var cap: float = body.gm.capture_ratio()
-	var esc: float = body.gm.escape_ratio()
-	if cap > _prev_cap + 0.0001 or esc > _prev_esc + 0.0001:
-		pulse()
-	_prev_cap = cap
-	_prev_esc = esc
+	var n: int = body.gm.knock_count()
+	_prev_knocks = n
+
+	# The third knock: play the fall once, then hold the lying pose for the stun.
+	var st: bool = body.gm.runner_stunned()
+	if st and not _prev_stunned:
+		_knockback_lock = KNOCKBACK_LOCK_TIME
+	_prev_stunned = st
+
+	var d: int = body.gm.devices_destroyed()
+	if d > _prev_destroyed:
+		_slam_lock = SLAM_LOCK_TIME
+	_prev_destroyed = d

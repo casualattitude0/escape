@@ -1,8 +1,7 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player.gd" id="1"]
 [ext_resource type="SpriteFrames" path="res://scenes/resources/player_frames.tres" id="2"]
-[ext_resource type="Texture2D" path="res://sprites/items/item_0690.tres" id="8"]
 [ext_resource type="Script" path="res://scripts/player/player_movement.gd" id="3"]
 [ext_resource type="Script" path="res://scripts/player/player_combat.gd" id="4"]
 [ext_resource type="Script" path="res://scripts/player/player_health.gd" id="5"]
@@ -29,15 +28,12 @@ properties/2/replication_mode = 1
 properties/3/path = NodePath(".:net_flip")
 properties/3/spawn = true
 properties/3/replication_mode = 1
-properties/4/path = NodePath(".:capturable")
+properties/4/path = NodePath(".:dead")
 properties/4/spawn = true
 properties/4/replication_mode = 1
-properties/5/path = NodePath(".:dead")
+properties/5/path = NodePath(".:stunned")
 properties/5/spawn = true
 properties/5/replication_mode = 1
-properties/6/path = NodePath(".:fainted")
-properties/6/spawn = true
-properties/6/replication_mode = 1
 
 [node name="Player" type="CharacterBody2D"]
 collision_layer = 2
@@ -65,12 +61,6 @@ disabled = true
 position = Vector2(0, 20)
 target_position = Vector2(0, -50)
 collision_mask = 1
-
-[node name="CarrySprite" type="Sprite2D" parent="."]
-visible = false
-position = Vector2(0, -70)
-scale = Vector2(1.8, 1.8)
-texture = ExtResource("8")
 
 [node name="NameTag" type="Label" parent="."]
 offset_left = -60.0

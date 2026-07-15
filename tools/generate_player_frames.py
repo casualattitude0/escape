@@ -27,13 +27,14 @@ ANIMS = [
     ("crawl",    "Sprites/Crawl",          "Crawl",           8, True,  10.0),
     ("crouch",   "Sprites/Crouch",         "Crouch",          6, False,  9.0),
     ("roll",     "Sprites/Roll",           "Roll",           10, False, 16.0),  # tunnel exit-stun tumble (Runner)
-    # --- combat / capture (GDD 4.4 / 4.5) -----------------------------------
-    ("attack",   "Sprites/Combat/Punch01", "Punch01",         6, False, 16.0),  # Runner melee
-    ("grab",     "Sprites/InteractionPull","InteractionPull", 6, False, 12.0),  # Hunter suppression: lunge then hold
-    ("struggle", "Sprites/Combat/ShockHeavy", "ShockHeavy",   4, True,  16.0),  # Runner thrashing to break the grip
-    ("push",     "Sprites/Push",           "Push",            8, True,  14.0),  # Hunter shoving during the mash-off
-    ("pull",     "Sprites/Pull",           "Pull",            6, True,  14.0),  # Runner heaving away during the mash-off
-    ("faint",    "Sprites/Knockback",      "Knockback",       6, False, 12.0),  # Hunter dazed after a Runner escapes its grip
+    # --- combat (GDD 4.1 / 4.6) ---------------------------------------------
+    ("attack",   "Sprites/Combat/Punch01", "Punch01",         6, False, 16.0),  # Runner kill swing
+    ("sabotage", "Sprites/Combat/Punch02", "Punch02",         4, False, 18.0),  # Runner mashing a device: snappier than the kill
+    ("slam",     "Sprites/Combat/GroundSlam", "GroundSlam",  10, False, 14.0),  # device destroyed
+    ("knock",    "Sprites/Combat/Punch03", "Punch03",         7, False, 16.0),  # Hunter knock swing
+    ("hit",      "Sprites/Combat/Hit",     "Hit",             3, False, 18.0),  # Runner reacting to a knock
+    ("stunned",  "Sprites/Combat/Stunned", "Stunned",         7, True,  10.0),  # Runner stunned (3 knocks)
+    ("knockback","Sprites/Knockback",      "Knockback",       6, False, 12.0),  # Runner kicked away from the device
     ("die",      "Sprites/Die",            "Die",             9, False, 12.0),  # Hunter killed
 ]
 
