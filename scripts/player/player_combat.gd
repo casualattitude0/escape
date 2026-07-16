@@ -141,8 +141,13 @@ func _find_target_hunter(gm: Node) -> Node2D:
 func _hunter_input(gm: Node) -> void:
 	if body.dead:
 		return
+	if body.riding:
+		return
 	if Input.is_action_just_pressed("report"):
 		gm.report_press.rpc_id(1)
+		return
+	if Input.is_action_just_pressed("elevator"):
+		gm.elevator_press.rpc_id(1)
 		return
 	if _stiff_left > 0.0:
 		return

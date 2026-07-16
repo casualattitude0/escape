@@ -26,9 +26,15 @@ var net_anim: String = Anim.IDLE
 var net_flip: bool = false
 var dead: bool = false           # Hunter: killed, waiting to respawn
 var stunned: bool = false        # Runner: stunned by a third knock (GDD 4.6)
+var riding: bool = false         # Hunter: locked in an elevator ride (GDD 4.5)
 
 # Set at spawn (world.gd); Hunters respawn here.
 var spawn_point: Vector2 = Vector2.ZERO
+
+# Elevator ride interpolation (owner only, while riding == true).
+var _ride_start_pos: Vector2
+var _ride_end_pos: Vector2
+var _ride_timer: float = 0.0
 
 # The GameManager (server-authoritative match state), found once.
 var gm: Node
@@ -57,6 +63,15 @@ func _physics_process(delta: float) -> void:
 	health.tick(delta)
 	if dead:
 		movement.freeze()
+		animator.publish(delta)
+		return
+
+	if riding:
+		_ride_timer += delta
+		var t: float = clampf(_ride_timer / ElevatorSystem.RIDE_TIME, 0.0, 1.0)
+		t = t * t * (3.0 - 2.0 * t)
+		global_position = _ride_start_pos.lerp(_ride_end_pos, t)
+		velocity = Vector2.ZERO
 		animator.publish(delta)
 		return
 
@@ -144,3 +159,21 @@ func knockback(vx: float) -> void:
 	# movement.tick() would steer velocity.x straight back to whatever the Runner
 	# is holding and the hit would look like nothing happened.
 	combat.stagger(KNOCK_STAGGER)
+
+@rpc("any_peer", "call_local", "reliable")
+func ride_start(start_pos: Vector2, end_pos: Vector2) -> void:
+	if not _from_server():
+		return
+	riding = true
+	_ride_start_pos = start_pos
+	_ride_end_pos = end_pos
+	_ride_timer = 0.0
+	velocity = Vector2.ZERO
+
+@rpc("any_peer", "call_local", "reliable")
+func ride_end(final_pos: Vector2) -> void:
+	if not _from_server():
+		return
+	riding = false
+	global_position = final_pos
+	velocity = Vector2.ZERO

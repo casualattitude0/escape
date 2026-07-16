@@ -6,9 +6,11 @@
 [ext_resource type="Script" uid="uid://cuk022c1is02j" path="res://scripts/ui/hud.gd" id="6"]
 [ext_resource type="Script" uid="uid://6ckk13jxob67" path="res://scripts/world/device_system.gd" id="7"]
 [ext_resource type="Script" uid="uid://uno1eq7wayiy" path="res://scripts/world/knock_system.gd" id="8"]
-[ext_resource type="Script" uid="uid://3jq67mskbe6x" path="res://scripts/world/zone_system.gd" id="11"]
 [ext_resource type="Script" uid="uid://bvdoj0u0jj4nu" path="res://scripts/ui/fog.gd" id="9"]
 [ext_resource type="Script" uid="uid://ba58li2l7sylr" path="res://scripts/ui/minimap.gd" id="10"]
+[ext_resource type="Script" uid="uid://3jq67mskbe6x" path="res://scripts/world/zone_system.gd" id="11"]
+[ext_resource type="Script" uid="uid://ddto62xwvugky" path="res://scripts/world/elevator_system.gd" id="12"]
+[ext_resource type="PackedScene" path="res://scenes/actors/elevator.tscn" id="13"]
 
 [node name="World" type="Node2D" unique_id=731030136]
 script = ExtResource("1")
@@ -39,12 +41,27 @@ script = ExtResource("7")
 [node name="KnockSystem" type="Node" parent="GameManager" unique_id=854305403]
 script = ExtResource("8")
 
-[node name="ZoneSystem" type="Node" parent="GameManager"]
+[node name="ZoneSystem" type="Node" parent="GameManager" unique_id=1833736632]
 script = ExtResource("11")
+
+[node name="ElevatorSystem" type="Node" parent="GameManager" unique_id=12393580]
+script = ExtResource("12")
 
 [node name="Devices" type="Node2D" parent="." unique_id=124564449]
 
 [node name="Escape" type="Node2D" parent="." unique_id=2108603257]
+
+[node name="Elevators" type="Node2D" parent="." unique_id=601007062]
+
+[node name="ElevatorC" parent="Elevators" unique_id=602275543 instance=ExtResource("13")]
+position = Vector2(672, 880)
+stop_top = Vector2(672, 448)
+stop_bottom = Vector2(672, 1344)
+
+[node name="ElevatorD" parent="Elevators" unique_id=943240260 instance=ExtResource("13")]
+position = Vector2(2672, 1168)
+stop_top = Vector2(2672, 672)
+stop_bottom = Vector2(2672, 1664)
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1038874089]
 script = ExtResource("6")

@@ -36,7 +36,7 @@ func _ready() -> void:
 				_my_player = c
 				break
 	else:
-		hint_label.text = "A/D move · Space jump · F knock · R report\n3 knocks stun. Report locks zones. Run out the clock."
+		hint_label.text = "A/D move · Space jump · F knock · R report · E elevator\n3 knocks stun. Report locks zones. Run out the clock."
 		for c in get_tree().get_first_node_in_group("game_manager").players().get_children():
 			if c.is_multiplayer_authority():
 				_my_player = c

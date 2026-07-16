@@ -39,9 +39,11 @@ var time_left := MATCH_TIME
 @onready var devices: DeviceSystem = $DeviceSystem
 @onready var knock: KnockSystem = $KnockSystem
 @onready var zones: ZoneSystem = $ZoneSystem
+@onready var elevators: ElevatorSystem = $ElevatorSystem
 @onready var _players: Node = get_node("../Players")
 @onready var _devices_root: Node = get_node("../Devices")
 @onready var _escape_root: Node = get_node("../Escape")
+@onready var _elevators_root: Node = get_node("../Elevators")
 @onready var _terrain: TileMapLayer = get_node("../Terrain")
 
 var _sync_accum := 0.0           # cadence for periodic (clock) fast syncs
@@ -53,6 +55,7 @@ var _attack_cd_left := 0.0
 
 func _ready() -> void:
 	add_to_group("game_manager")
+	elevators.setup(_elevators_root, _players)
 	set_physics_process(multiplayer.is_server())
 
 # ---- read facade (HUD / players / devices / escape) ------------------------
@@ -154,6 +157,30 @@ func zone_lockdown_left(pos: Vector2) -> float:
 ## Read facade: full zone data for minimap/HUD.
 func zone_data() -> ZoneSystem:
 	return zones
+
+# ---- elevators (GDD 4.5) --------------------------------------------------
+
+## A Hunter requests an elevator ride. Server validates, starts the ride, and
+## tells the requesting peer to animate locally.
+@rpc("any_peer", "call_local", "reliable")
+func elevator_press() -> void:
+	if not multiplayer.is_server() or winner != "":
+		return
+	var id := _sender_id()
+	var h: Node2D = _players.get_node_or_null(str(id))
+	if h == null or h.dead or h.get("role") != Roles.HUNTER:
+		return
+	if h.stunned or h.get("riding"):
+		return
+	if not elevators.try_ride(h):
+		return
+	var ride: Dictionary = elevators._riding[id]
+	h.ride_start.rpc_id(id, ride["start_pos"], ride["end_pos"])
+	emit_sound(h.global_position)
+
+## Read facade: is this peer currently riding an elevator?
+func is_riding(peer_id: int) -> bool:
+	return elevators.is_riding(peer_id)
 
 # ---- sabotage (GDD 4.1) ---------------------------------------------------
 
@@ -362,6 +389,11 @@ func _physics_process(delta: float) -> void:
 		_broadcast(false)
 	if zones.tick(delta):
 		_broadcast(false)
+	var arrived := elevators.tick(delta)
+	for ride in arrived:
+		var h: Node2D = _players.get_node_or_null(str(ride["pid"]))
+		if h != null:
+			h.ride_end.rpc_id(ride["pid"], ride["end_pos"])
 	# Keep the clock (and any drift) in sync a couple times a second.
 	_sync_accum += delta
 	if _sync_accum >= 0.5:
@@ -394,6 +426,7 @@ func _set_winner(w: String) -> void:
 	knock.force_end()
 	devices.force_end()
 	zones.force_end()
+	elevators.force_end()
 	_broadcast(true)
 	# The round is over — drop any dev snapshot so the next launch starts fresh.
 	if DevSnapshot.enabled():
@@ -405,7 +438,7 @@ func _set_winner(w: String) -> void:
 ## a snapshot from the old grapple/key build has `installs` and no device
 ## progress, so restoring it would silently produce a nonsense round (every device
 ## intact, but the state it was saved with long gone) rather than fail loudly.
-const SNAPSHOT_VERSION := 3
+const SNAPSHOT_VERSION := 4
 
 func snapshot_state() -> Dictionary:
 	return {
@@ -419,6 +452,7 @@ func snapshot_state() -> Dictionary:
 		"iframe": knock.iframe_left,
 		"stun": knock.stun_left,
 		"zones": zones.snapshot(),
+		"elev": elevators.snapshot(),
 	}
 
 func restore_state(d: Dictionary) -> void:
@@ -433,6 +467,7 @@ func restore_state(d: Dictionary) -> void:
 	knock.iframe_left = float(d.get("iframe", 0.0))
 	knock.stun_left = float(d.get("stun", 0.0))
 	zones.restore(d.get("zones", {}))
+	elevators.restore(d.get("elev", {}))
 	_broadcast(true)   # push the restored state to every peer's HUD
 
 func _state_dict() -> Dictionary:

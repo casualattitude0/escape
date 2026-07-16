@@ -9,6 +9,8 @@
 [ext_resource type="Script" uid="uid://3jq67mskbe6x" path="res://scripts/world/zone_system.gd" id="11"]
 [ext_resource type="Script" uid="uid://bvdoj0u0jj4nu" path="res://scripts/ui/fog.gd" id="9"]
 [ext_resource type="Script" uid="uid://ba58li2l7sylr" path="res://scripts/ui/minimap.gd" id="10"]
+[ext_resource type="Script" path="res://scripts/world/elevator_system.gd" id="12"]
+[ext_resource type="PackedScene" path="res://scenes/actors/elevator.tscn" id="13"]
 
 [node name="World" type="Node2D" unique_id=731030136]
 script = ExtResource("1")
@@ -42,9 +44,24 @@ script = ExtResource("8")
 [node name="ZoneSystem" type="Node" parent="GameManager"]
 script = ExtResource("11")
 
+[node name="ElevatorSystem" type="Node" parent="GameManager"]
+script = ExtResource("12")
+
 [node name="Devices" type="Node2D" parent="." unique_id=124564449]
 
 [node name="Escape" type="Node2D" parent="." unique_id=2108603257]
+
+[node name="Elevators" type="Node2D" parent="."]
+
+[node name="ElevatorC" parent="Elevators" instance=ExtResource("13")]
+position = Vector2(2496, 880)
+stop_top = Vector2(2496, 448)
+stop_bottom = Vector2(2496, 1344)
+
+[node name="ElevatorD" parent="Elevators" instance=ExtResource("13")]
+position = Vector2(480, 1168)
+stop_top = Vector2(480, 672)
+stop_bottom = Vector2(480, 1664)
 
 [node name="HUD" type="CanvasLayer" parent="." unique_id=1038874089]
 script = ExtResource("6")
