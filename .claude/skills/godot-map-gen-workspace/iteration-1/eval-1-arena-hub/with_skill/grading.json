@@ -1,0 +1,10 @@
+{
+  "expectations": [
+    {"text": "Go program compiles without errors", "passed": true, "evidence": "go build succeeded with no errors"},
+    {"text": "Output .tscn has correct format", "passed": true, "evidence": "Contains gd_scene format=4, TileMapLayer, PackedByteArray, terrain_tileset.tres reference"},
+    {"text": "Map has 3 rooms: 1 large hub and 2 smaller side rooms", "passed": true, "evidence": "Hub (40x44), left side (21x29), right side (21x29)"},
+    {"text": "Rooms connected via tunnels or narrow passages", "passed": true, "evidence": "4 tunnels (upper/lower on each side) creating loop connectivity"},
+    {"text": "Hub has multiple vertical platforms for chasing", "passed": true, "evidence": "10+ staggered platforms at different heights, two pillars for sightline breaks"},
+    {"text": "Background tiles vary per room", "passed": true, "evidence": "backgroundAtlasForRoom() with different atlas regions: hub=rows 16-19, left=rows 8-11, right=rows 4-7, tunnels=rows 24-27"}
+  ]
+}

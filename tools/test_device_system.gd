@@ -4,8 +4,8 @@ extends SceneTree
 ## escape point now that there is only one. Run:
 ##   Godot --headless --script tools/test_device_system.gd
 
-const LEVEL := preload("res://scenes/levels/level.tscn")
-const RUNNER_SPAWN := Vector2(208, 1690)   # mirrors world.gd
+const LEVEL := preload("res://scenes/levels/section1.tscn")
+var RUNNER_SPAWN := Vector2.ZERO
 
 var _failed := 0
 
@@ -90,6 +90,9 @@ func _test_layout() -> void:
 	if terrain == null:
 		_assert(false, "found the Terrain layer")
 		return
+	var rs := level.get_node_or_null("RunnerSpawn") as Marker2D
+	if rs != null:
+		RUNNER_SPAWN = rs.position
 
 	var worst_exit_to_spawn := INF
 	var worst_exit_to_device := INF

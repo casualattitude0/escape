@@ -1,0 +1,10 @@
+{
+  "expectations": [
+    {"text": "Go program compiles without errors", "passed": true, "evidence": "go build succeeded with no errors"},
+    {"text": "Output .tscn has correct format", "passed": true, "evidence": "Contains gd_scene format=4, TileMapLayer, PackedByteArray, terrain_tileset.tres reference"},
+    {"text": "Map has 4 distinct rooms carved from the solid grid", "passed": true, "evidence": "12 carve calls creating 4 rooms (top-left, top-right, bottom-right, bottom-left)"},
+    {"text": "All rooms connect to at least 2 others forming a ring", "passed": true, "evidence": "4 corridors (top, right, bottom, left) forming A->B->C->D->A ring with shaft platforms"},
+    {"text": "Encoder uses both source_id=0 and source_id=3", "passed": true, "evidence": "tileRecord(..., 0, ...) for boundary, tileRecord(..., 3, ...) for background with backgroundAtlasForRoom()"},
+    {"text": "Rooms have interior platforms", "passed": true, "evidence": "22 fill calls adding staggered platforms inside rooms"}
+  ]
+}

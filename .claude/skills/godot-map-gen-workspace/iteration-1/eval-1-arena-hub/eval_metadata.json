@@ -1,0 +1,13 @@
+{
+  "eval_id": 1,
+  "eval_name": "arena-hub-3-rooms",
+  "prompt": "Create a Go map generator for a small arena-style level: one big central hub room with 2 smaller side rooms, connected by tunnels. The hub should have lots of platforms for vertical chasing. Use background tiles to make each room look different. Write it as a complete Go program that outputs a .tscn file.",
+  "assertions": [
+    {"text": "Go program compiles without errors", "type": "programmatic"},
+    {"text": "Output .tscn has correct format: [gd_scene format=4], TileMapLayer node, PackedByteArray, correct tileset ext_resource", "type": "programmatic"},
+    {"text": "Map has 3 rooms: 1 large hub and 2 smaller side rooms", "type": "manual"},
+    {"text": "Rooms connected via tunnels or narrow passages", "type": "manual"},
+    {"text": "Hub has multiple vertical platforms for chasing", "type": "manual"},
+    {"text": "Background tiles vary per room (different atlas regions)", "type": "programmatic"}
+  ]
+}
