@@ -7,13 +7,8 @@ const PLAYER := preload("res://scenes/actors/player.tscn")
 const DEVICE := preload("res://scenes/actors/device.tscn")
 const ESCAPE := preload("res://scenes/actors/escape_point.tscn")
 
-const RUNNER_SPAWN := Vector2(208, 1690)
-const HUNTER_SPAWNS := [
-	Vector2(1500, 1650),
-	Vector2(1650, 1650),
-	Vector2(1800, 1650),
-	Vector2(1950, 1650),
-]
+var RUNNER_SPAWN := Vector2.ZERO
+var HUNTER_SPAWNS: Array[Vector2] = []
 
 # One way out (GDD 3): it opens only once every device is broken, so there is
 # nothing to choose between and no reason for a second.
@@ -34,7 +29,26 @@ var _layout_built := false
 var _resume: Dictionary = {}
 var _active_seed := 0
 
+func _read_spawns() -> void:
+	var rs := get_node_or_null("RunnerSpawn") as Marker2D
+	if rs != null:
+		RUNNER_SPAWN = _snap_to_floor(rs.position)
+	for i in 4:
+		var hs := get_node_or_null("HunterSpawn%d" % i) as Marker2D
+		if hs != null:
+			HUNTER_SPAWNS.append(_snap_to_floor(hs.position))
+
+func _snap_to_floor(pos: Vector2) -> Vector2:
+	var tile_pos := terrain.local_to_map(pos)
+	var tile_size := terrain.tile_set.tile_size
+	for dy in 200:
+		var check := Vector2i(tile_pos.x, tile_pos.y + dy)
+		if terrain.get_cell_source_id(check) != -1:
+			return Vector2(pos.x, check.y * tile_size.y - 36)
+	return pos
+
 func _ready() -> void:
+	_read_spawns()
 	add_child(PauseMenu.new())        # Esc overlay (every peer has its own)
 	spawner.spawn_function = _spawn_player
 	if multiplayer.is_server():

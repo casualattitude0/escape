@@ -8,8 +8,8 @@ extends Control
 ## Runner: facility outline, own position, unbroken devices, escape point, and
 ## directional arrows pointing toward each Hunter (bearing only, not position).
 
-const TILE := 32
-const GRID := Vector2i(100, 60)
+const TILE := 64
+const GRID := Vector2i(50, 30)
 const MAP_MIN := Vector2(0, 0)
 const MAP_MAX := Vector2(GRID.x * TILE, GRID.y * TILE)
 const PING_TIME := 4.0

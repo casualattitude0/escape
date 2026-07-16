@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Generate scenes/levels/level.tscn — Metroid Dread-style asymmetric map.
+"""Generate scenes/levels/section1.tscn — Metroid Dread-style asymmetric map.
 
-Layout (tile grid 100x60, 32px tiles, y down):
+Layout (tile grid 50x30, 64px tiles, y down):
 
-  Rooms                       Openings (>=2 each)              Tunnels (0-2 each)
-  A SpawnHall  x4..26  y44..54  door->B, shaft->C, T1          T1 (under floor, y56)
-  B LowerHall  x30..68 y46..54  door->A, door->D, drop<-F, T1  T1
-  C LeftShaft  x18..24 y12..43  open->A, door->E               -
-  E TopCorridor x28..60 y8..15  door->C, door->G, drop->F      -
-  F CentralHub x40..70 y19..40  drop<-E, shaft->B, T2          T2 (under floor, y42)
-  G TopRight   x64..93 y8..14   door->E, shaft->D              -
-  D RightShaft x74..93 y19..54  shaft<-G, door->B, T2          T2
+  Rooms                        Openings (>=2 each)              Tunnels (0-2 each)
+  A SpawnHall  x2..13  y22..27  door->B, shaft->C, T1          T1 (under floor, y28)
+  B LowerHall  x15..34 y23..27  door->A, door->D, drop<-F, T1  T1
+  C LeftShaft  x9..12  y6..21   open->A, door->E               -
+  E TopCorridor x14..30 y4..7   door->C, door->G, drop->F      -
+  F CentralHub x20..35 y10..20  drop<-E, shaft->B, T2          T2 (under floor, y21)
+  G TopRight   x32..46 y4..7    door->E, shaft->D              -
+  D RightShaft x37..46 y10..27  shaft<-G, door->B, T2          T2
 
   Tunnels are 1 tile high, run BELOW the walking floor, entered by
   sliding/crawling into a sunken pit (2 deep on the F/A sides).
 
-Player metrics: jump rise <= 3 tiles, horizontal gap while rising 3 <= 2 tiles,
-stand height ~1.6 tiles (2 clear rows needed above any stand row).
+Player metrics at 64px: jump rise <= 1.5 tiles (~96px), horizontal gap
+while rising 1.5 <= 1 tile, stand height ~0.8 tiles (1 clear row needed).
 """
 import base64, struct, os
 
-W, H = 100, 60
+W, H = 50, 30
 solid = [[True] * W for _ in range(H)]
 
 def carve(x0, x1, y0, y1):
@@ -34,127 +34,114 @@ def fill(x0, x1, y0, y1):
             solid[y][x] = True
 
 # ---- room interiors -------------------------------------------------------
-carve(4, 26, 44, 54)    # A SpawnHall
-carve(30, 68, 46, 54)   # B LowerHall
-carve(18, 24, 12, 43)   # C LeftShaft (opens into A's ceiling)
-carve(28, 60, 8, 15)    # E TopCorridor
-carve(40, 70, 19, 40)   # F CentralHub
-carve(64, 93, 8, 14)    # G TopRight
-carve(74, 93, 19, 54)   # D RightShaft
+carve(2, 13, 22, 27)    # A SpawnHall
+carve(15, 34, 23, 27)   # B LowerHall
+carve(9, 12, 6, 21)     # C LeftShaft (opens into A's ceiling)
+carve(14, 30, 4, 7)     # E TopCorridor
+carve(20, 35, 10, 20)   # F CentralHub
+carve(32, 46, 4, 7)     # G TopRight
+carve(37, 46, 10, 27)   # D RightShaft
 
 # ---- interior structures (fill) -------------------------------------------
-# A: climb chain up to C shaft (stand rows 55 -> 52 -> 49 -> 46)
-fill(8, 10, 52, 52)
-fill(13, 15, 49, 49)
-fill(18, 20, 46, 46)
-fill(4, 5, 53, 54)      # corner step by the left wall
-fill(22, 23, 54, 54)    # floor bump under the C shaft mouth
-fill(10, 12, 44, 44)    # ceiling stalactite
-# C: zig-zag shaft platforms, rise 3 per hop, ledge row 19 leads to door
-for i, row in enumerate(range(43, 21, -3)):        # 43 40 37 34 31 28 25 22
-    x0 = 22 if i % 2 == 0 else 18
-    fill(x0, x0 + 2, row, row)
-fill(22, 24, 19, 19)                               # exit ledge -> door to E
-# C: side pockets carved into the shaft walls (future item nooks)
-carve(14, 17, 26, 30)   # left pocket: drop in from the row-28 platform,
-                        # jump back out (stand 31 -> 28, rise 3)
-carve(25, 27, 36, 39)   # right pocket: hop down from the row-37 platform
-# E: raised right floor (stand 14 vs 16) + shelf + details
-fill(46, 60, 14, 15)
-fill(34, 35, 15, 15)    # floor bump on the lower section
-fill(52, 54, 11, 11)    # high shelf above the raised floor (rise 3,
-                        # 2 rows of walking clearance beneath)
-fill(36, 38, 8, 8)      # ceiling bumps
-fill(57, 59, 8, 8)
-# B: plateau + floating platform + ceiling stalactites
-fill(54, 60, 52, 54)
-fill(36, 38, 52, 52)
-fill(33, 34, 46, 46)
-fill(44, 46, 46, 46)
-# F: platforms (floor stand 41; catches the drop from E at x41..43),
-#    then a chain climbing to the upper-right corner
-fill(46, 49, 38, 38)
-fill(41, 44, 35, 35)
-fill(46, 49, 32, 32)
-# F: left ladder back up to E — ends at a ledge inside the shaft mouth
-# (x41..42) so the player can jump up through the hole; x43 stays open
-# as the drop channel from E
-fill(41, 44, 29, 29)
-fill(46, 49, 26, 26)
-fill(41, 43, 24, 24)
-fill(44, 46, 22, 22)
-fill(41, 42, 19, 19)    # climb-out ledge (stand 19 -> jump to E stand 16)
-fill(51, 54, 29, 29)
-# F: loft partition in the upper-right quarter. Floor at y28, partition
-# wall hanging from the ceiling at x60 with a 3-tall doorway (y25..27).
-# Inside the loft two platforms climb to nothing fancy; the east end
-# jumps straight into H (loft stand 28 -> H floor stand 26, rise 2).
-fill(56, 70, 28, 28)    # loft floor (walk row 28, F main air below y29)
-fill(60, 60, 19, 24)    # partition wall, doorway open at y25..27
-fill(66, 69, 25, 25)    # loft platform (rise 3 from loft floor)
-fill(61, 63, 22, 22)    # loft high platform (rise 3, gap 2)
-fill(57, 58, 39, 40)    # low pillar on the floor (hop over, rise 2)
-fill(53, 55, 19, 19)    # ceiling stalactite
+# A: climb chain up to C shaft
+fill(4, 5, 26, 26)
+fill(7, 8, 25, 25)
+fill(9, 10, 23, 23)
+fill(2, 3, 27, 27)      # corner step
+fill(11, 12, 27, 27)    # floor bump under C shaft mouth
+fill(5, 6, 22, 22)      # ceiling stalactite
+# C: zig-zag shaft platforms
+for i, row in enumerate(range(21, 11, -2)):
+    x0 = 11 if i % 2 == 0 else 9
+    fill(x0, x0 + 1, row, row)
+fill(11, 12, 10, 10)    # exit ledge -> door to E
+# C: side pockets
+carve(7, 8, 13, 15)     # left pocket
+carve(13, 14, 18, 20)   # right pocket
+# E: raised right floor + details
+fill(23, 30, 7, 7)
+fill(17, 17, 7, 7)      # floor bump
+fill(26, 27, 6, 6)      # high shelf
+fill(18, 19, 4, 4)      # ceiling bumps
+fill(29, 30, 4, 4)
+# B: plateau + platform + ceiling details
+fill(27, 30, 26, 27)
+fill(18, 19, 26, 26)
+fill(17, 17, 23, 23)
+fill(22, 23, 23, 23)
+# F: platforms
+fill(23, 25, 19, 19)
+fill(21, 22, 18, 18)
+fill(23, 25, 16, 16)
+# F: left ladder back up to E
+fill(21, 22, 15, 15)
+fill(23, 25, 13, 13)
+fill(21, 22, 12, 12)
+fill(22, 23, 11, 11)
+fill(21, 21, 10, 10)    # climb-out ledge
+fill(26, 27, 15, 15)
+# F: loft partition
+fill(28, 35, 14, 14)    # loft floor
+fill(30, 30, 10, 12)    # partition wall, doorway open at y13
+fill(33, 35, 13, 13)    # loft platform
+fill(31, 32, 11, 11)    # loft high platform
+fill(29, 29, 20, 20)    # low pillar
+fill(27, 27, 10, 10)    # ceiling stalactite
 # G: decorative step, raised right end, hanging platform
-fill(74, 76, 14, 14)
-fill(88, 93, 13, 14)    # raised floor at the right end (rise 2)
-fill(78, 80, 12, 12)    # floating platform (rise 3)
-fill(67, 69, 8, 8)      # ceiling bump
+fill(37, 38, 7, 7)
+fill(44, 46, 7, 7)      # raised floor at right end
+fill(39, 40, 6, 6)      # floating platform
+fill(34, 35, 4, 4)      # ceiling bump
 # D: tunnel block + entry ledge, then zig-zag climb chain
-fill(74, 78, 41, 41)    # tunnel ceiling
-fill(74, 78, 43, 44)    # tunnel floor block
-fill(79, 85, 43, 43)    # entry ledge (slide left into tunnel)
-fill(76, 79, 52, 52)
-fill(82, 85, 49, 49)
-fill(88, 91, 46, 46)
-fill(88, 91, 40, 40)
-fill(83, 86, 37, 37)
-fill(88, 91, 34, 34)
-fill(83, 86, 31, 31)
-fill(88, 91, 28, 28)
-fill(83, 86, 25, 25)
-fill(77, 79, 53, 54)    # chunky base under the first platform
-fill(80, 82, 19, 19)    # ceiling stalactite
+fill(37, 39, 21, 21)    # tunnel ceiling
+fill(37, 39, 22, 22)    # tunnel floor block
+fill(40, 43, 22, 22)    # entry ledge
+fill(38, 40, 26, 26)
+fill(41, 43, 25, 25)
+fill(44, 46, 23, 23)
+fill(44, 46, 20, 20)
+fill(42, 43, 19, 19)
+fill(44, 46, 17, 17)
+fill(42, 43, 16, 16)
+fill(44, 46, 14, 14)
+fill(42, 43, 13, 13)
+fill(39, 40, 27, 27)    # chunky base
+fill(40, 41, 10, 10)    # ceiling stalactite
 
 # H: small chamber off F's top-right corner (item room).
-# West face opens into F (walk off the x66..69 shelf and drift right in);
-# east doorway at y23..25 hops to/from D's top platform (x83..86, stand 25).
-fill(74, 79, 19, 19)    # ceiling (joins the x80..82 stalactite)
-fill(80, 81, 20, 22)    # east wall, doorway kept open below (y23..25)
-carve(71, 79, 20, 25)   # interior, carved through the F|D wall
-fill(74, 79, 26, 26)    # floor (x71..73 wall top completes it, stand 26)
+fill(37, 39, 10, 10)    # ceiling
+fill(40, 41, 10, 11)    # east wall, doorway open below
+carve(36, 39, 10, 13)   # interior
+fill(37, 39, 13, 13)    # floor
 
 # ---- doors / shafts --------------------------------------------------------
-carve(27, 29, 51, 54)   # A <-> B door
-carve(69, 73, 51, 54)   # B <-> D door
-carve(25, 27, 16, 18)   # C <-> E door (via lowered alcove)
-carve(28, 31, 16, 18)   # E lowered alcove floor (stand 19, step up to 16)
-carve(32, 33, 16, 17)   # half-step out of the alcove (19 -> 18 -> 16)
-carve(61, 63, 12, 14)   # E <-> G door (1-tile step down into G)
-carve(41, 43, 16, 18)   # E <-> F shaft (two-way: ledge at stand 19 below)
-carve(44, 45, 17, 18)   # undercut right of the shaft so the rise-3 jump
-                        # from the x44..46 platform doesn't hit the ceiling
-carve(47, 49, 41, 45)   # F -> B drop shaft
-carve(84, 86, 15, 18)   # G -> D drop shaft
+carve(14, 14, 26, 27)   # A <-> B door
+carve(35, 36, 26, 27)   # B <-> D door
+carve(13, 14, 8, 9)     # C <-> E door
+carve(14, 16, 8, 9)     # E lowered alcove
+carve(31, 31, 6, 7)     # E <-> G door
+carve(21, 22, 8, 9)     # E <-> F shaft
+carve(24, 25, 21, 22)   # F -> B drop shaft
+carve(42, 43, 8, 9)     # G -> D drop shaft
 
 # ---- tunnels (1 tile high, below the walking floor) ------------------------
-# T1: A <-> B, runs at y56 under the y55 floor; sunken pits both ends
-carve(14, 15, 55, 56)   # pit in A
-carve(16, 38, 56, 56)   # tunnel (ceiling y55 stays solid)
-carve(39, 40, 55, 56)   # pit in B
-# T1b: B internal, runs at y56 under the plateau (slide in, pop out)
-carve(50, 51, 55, 55)   # pit left of the plateau
-carve(63, 64, 55, 55)   # pit right of the plateau
-carve(50, 64, 56, 56)   # tunnel under the plateau
-# T2: F <-> D, runs at y42 under F's floor (stand row 41)
-carve(66, 67, 41, 42)   # pit in F
-carve(68, 78, 42, 42)   # tunnel through F floor, F|D wall, and D block
+# T1: A <-> B, runs at y28 under the y27 floor; sunken pits both ends
+carve(7, 8, 28, 28)     # pit in A
+carve(8, 19, 28, 28)    # tunnel
+carve(20, 20, 28, 28)   # pit in B
+# T1b: B internal
+carve(25, 26, 28, 28)   # pit left of plateau
+carve(32, 32, 28, 28)   # pit right of plateau
+carve(25, 32, 28, 28)   # tunnel under plateau
+# T2: F <-> D, runs at y21 under F's floor
+carve(33, 34, 21, 21)   # pit in F
+carve(34, 39, 21, 21)   # tunnel through F floor, F|D wall, and D block
 
 # ---- ASCII preview ---------------------------------------------------------
 for y in range(H):
     print(f"{y:3d} " + "".join("#" if solid[y][x] else "." for x in range(W)))
 
-# ---- tile picking (3x3 blob + thin-platform row 11) ------------------------
+# ---- tile picking (3x3 blob + thin-platform row 5) ------------------------
 def is_solid(x, y):
     return True if not (0 <= x < W and 0 <= y < H) else solid[y][x]
 
@@ -162,8 +149,8 @@ def atlas(x, y):
     up, dn = not is_solid(x, y - 1), not is_solid(x, y + 1)
     lf, rt = not is_solid(x - 1, y), not is_solid(x + 1, y)
     if up and dn:  # one-tile-thick strip -> platform tiles
-        return (1 if lf else 3 if rt else 2, 11)
-    row = 7 if up else 9 if dn else 8
+        return (1 if lf else 3 if rt else 2, 5)
+    row = 3 if up else 5 if dn else 4
     col = 1 if lf else 3 if rt else 2
     return (col, row)
 
@@ -178,7 +165,7 @@ for y in range(H):
             count += 1
 b64 = base64.b64encode(bytes(buf)).decode()
 
-out = os.path.join(os.path.dirname(__file__), "..", "scenes", "levels", "level.tscn")
+out = os.path.join(os.path.dirname(__file__), "..", "scenes", "levels", "section1.tscn")
 with open(out, "w") as f:
     f.write('[gd_scene format=4]\n\n')
     f.write('[ext_resource type="TileSet" path="res://scenes/resources/terrain_tileset.tres" id="1_2q6dc"]\n\n')

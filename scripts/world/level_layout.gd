@@ -9,20 +9,20 @@ extends RefCounted
 ## Deterministic: seed a RandomNumberGenerator identically on every peer and the
 ## same layout comes out, so the host only has to share the seed (see world.gd).
 
-const TILE := 32
+const TILE := 64
 
 # Rooms as tile-space rects Rect2i(x, y, w, h), inclusive of the interior. These
 # mirror the carve() calls in tools/generate_level.py — they are just regions to
 # spread spawns over; the real cells are filtered to actual standable floor.
 const ROOMS := {
-	"A": Rect2i(4, 44, 23, 11),    # SpawnHall (Runner starts here)
-	"B": Rect2i(30, 46, 39, 9),    # LowerHall (Hunters start here)
-	"C": Rect2i(18, 12, 7, 32),    # LeftShaft
-	"E": Rect2i(28, 8, 33, 8),     # TopCorridor
-	"F": Rect2i(40, 19, 31, 22),   # CentralHub
-	"G": Rect2i(64, 8, 30, 7),     # TopRight
-	"D": Rect2i(74, 19, 20, 36),   # RightShaft
-	"H": Rect2i(71, 20, 9, 6),     # item chamber
+	"A": Rect2i(2, 22, 12, 6),     # SpawnHall (Runner starts here)
+	"B": Rect2i(15, 23, 20, 5),    # LowerHall (Hunters start here)
+	"C": Rect2i(9, 6, 4, 16),      # LeftShaft
+	"E": Rect2i(14, 4, 17, 4),     # TopCorridor
+	"F": Rect2i(20, 10, 16, 11),   # CentralHub
+	"G": Rect2i(32, 4, 15, 4),     # TopRight
+	"D": Rect2i(37, 10, 10, 18),   # RightShaft
+	"H": Rect2i(36, 10, 5, 3),     # item chamber
 }
 const RUNNER_ROOM := "A"
 

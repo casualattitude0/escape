@@ -50,16 +50,17 @@ animation = &"idle"
 autoplay = "idle"
 
 [node name="StandCollision" type="CollisionShape2D" parent="."]
+position = Vector2(0, 11)
 shape = SubResource("Cap_stand")
 
 [node name="SlideCollision" type="CollisionShape2D" parent="."]
-position = Vector2(0, 16)
+position = Vector2(0, 27)
 shape = SubResource("Rect_slide")
 disabled = true
 
 [node name="HeadCheck" type="RayCast2D" parent="."]
-position = Vector2(0, 20)
-target_position = Vector2(0, -50)
+position = Vector2(0, 31)
+target_position = Vector2(0, -61)
 collision_mask = 1
 
 [node name="NameTag" type="Label" parent="."]

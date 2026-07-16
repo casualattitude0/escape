@@ -12,7 +12,7 @@ class_name ZoneSystem
 ## The Runner can still fight and flee; they just can't progress on devices in
 ## the locked zone.
 
-const TILE := 32
+const TILE := 64
 
 const LOCKDOWN_TIME := 8.0
 const LOCKDOWN_COOLDOWN := 15.0
@@ -40,9 +40,6 @@ func _load_rooms(rooms: Dictionary) -> void:
 			r.size.y * TILE)
 		lockdown[room_name] = 0.0
 		cooldown[room_name] = 0.0
-
-func use_layout2() -> void:
-	_load_rooms(LevelLayout2.ROOMS)
 
 ## Which zone a world position falls in, or "" if outside all zones.
 func zone_at(pos: Vector2) -> String:
