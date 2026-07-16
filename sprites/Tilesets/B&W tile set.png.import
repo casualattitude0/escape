@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cuanf5dur62ow"
-path="res://.godot/imported/Decorations (32x32).png-cfa9ab68fecda3d7bf902d4905c633cc.ctex"
+uid="uid://bi7ktkn31eami"
+path="res://.godot/imported/B&W tile set.png-630dfa2051123263b9352dce42bf48b5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://sprites/14-TileSets/Decorations (32x32).png"
-dest_files=["res://.godot/imported/Decorations (32x32).png-cfa9ab68fecda3d7bf902d4905c633cc.ctex"]
+source_file="res://sprites/Tilesets/B&W tile set.png"
+dest_files=["res://.godot/imported/B&W tile set.png-630dfa2051123263b9352dce42bf48b5.ctex"]
 
 [params]
 
