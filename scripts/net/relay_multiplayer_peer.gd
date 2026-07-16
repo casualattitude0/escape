@@ -40,6 +40,16 @@ var _room_id: String = ""
 var _last_packet_peer: int = 0
 var _incoming: Array = []   # Array of {peer: int, data: PackedByteArray}
 
+# keepalive: Cloud Run and intermediate proxies drop idle WebSockets;
+# a periodic ping keeps the connection alive.
+const PING_INTERVAL_MS := 15_000
+var _last_ping_ms: int = 0
+
+# connection timeout: give up if the relay doesn't respond to the
+# handshake within this window.
+const CONNECT_TIMEOUT_MS := 10_000
+var _connect_started_ms: int = 0
+
 # host-only
 var _room_name: String
 var _max_players: int
@@ -72,11 +82,11 @@ func room_id() -> String:
 func _start(url: String) -> void:
 	var err := _ws.connect_to_url(url)
 	if err != OK:
-		# Deferred: the caller hasn't had a chance to connect to our signals
-		# yet, since _start() runs synchronously inside create_host/create_client.
 		call_deferred("emit_signal", "relay_failed", "connect_error_%d" % err)
 		return
 	_status = MultiplayerPeer.CONNECTION_CONNECTING
+	_connect_started_ms = Time.get_ticks_msec()
+	_last_ping_ms = _connect_started_ms
 
 
 func _send_control(msg: Dictionary) -> void:
@@ -98,11 +108,23 @@ func _poll() -> void:
 		else:
 			_send_control({"op": "join", "room_id": _join_room_id})
 
-	# Only one raw message per engine poll tick — a control frame's handling
-	# (peer_connected/peer_disconnected) reenters SceneMultiplayer synchronously,
-	# and batching it with an already-queued data frame in the same _poll() call
-	# can hand SceneMultiplayer a packet whose sender it hasn't registered yet.
-	# One-per-frame guarantees SceneMultiplayer fully settles between the two.
+	# Connection timeout — if the relay hasn't promoted us past CONNECTING
+	# within the deadline, give up instead of hanging forever.
+	if _status == MultiplayerPeer.CONNECTION_CONNECTING:
+		if Time.get_ticks_msec() - _connect_started_ms > CONNECT_TIMEOUT_MS:
+			_ws.close()
+			_status = MultiplayerPeer.CONNECTION_DISCONNECTED
+			relay_failed.emit("connect_timeout")
+			return
+
+	# Keepalive ping — prevents Cloud Run / intermediate proxies from
+	# dropping the WebSocket during idle periods (e.g. lobby waiting).
+	if state == WebSocketPeer.STATE_OPEN:
+		var now := Time.get_ticks_msec()
+		if now - _last_ping_ms >= PING_INTERVAL_MS:
+			_last_ping_ms = now
+			_send_control({"op": "ping"})
+
 	if _ws.get_available_packet_count() > 0:
 		_handle_packet(_ws.get_packet())
 

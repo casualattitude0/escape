@@ -1009,8 +1009,7 @@ func _handle_cli() -> void:
 			if parts.size() > 1:
 				_set_addr(parts[1])
 		elif arg.begins_with("map="):
-			Net.world_scene = "res://scenes/levels/world2.tscn" if arg.split("=")[1] == "2" \
-					else "res://scenes/levels/world.tscn"
+			Net.world_scene = "res://scenes/levels/section1.tscn"
 		elif arg == "resume":
 			resume = true
 		elif arg == "auto":

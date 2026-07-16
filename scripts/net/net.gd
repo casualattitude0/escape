@@ -56,9 +56,9 @@ var suppress_autoconnect := false
 # host uses it to route a late/reconnecting client straight into the match.
 var match_active := false
 
-# Which map to play. Host picks it (default map 1); the choice rides along in the
-# _load_world RPC so every peer loads the same scene. See scenes/world2.tscn.
-var world_scene := "res://scenes/levels/world.tscn"
+# Which map to play. Host picks it; the choice rides along in the _load_world RPC
+# so every peer loads the same scene.
+var world_scene := "res://scenes/levels/section1.tscn"
 
 # Live match snapshot handed across a rejoin reload (host-only). When a client
 # (re)joins mid-match the host fills this, everyone reloads the world, and the
@@ -76,6 +76,20 @@ var _my_token := ""             # this client's stable identity (lazy, see my_to
 var _relay_url_override := ""
 var _rooms_request: HTTPRequest
 var _rooms_busy := false
+var _rooms_timeout: SceneTreeTimer
+
+func _rooms_timeout_expired() -> void:
+	if _rooms_busy and _rooms_request != null:
+		_rooms_request.cancel_request()
+		_rooms_busy = false
+
+# --- client auto-reconnect ----------------------------------------------------
+# When the relay drops mid-match, retry a few times before giving up.
+const RECONNECT_MAX_ATTEMPTS := 3
+const RECONNECT_BASE_DELAY := 2.0   # seconds; doubles each retry
+var _reconnect_room_id := ""
+var _reconnect_attempts := 0
+var _reconnecting := false
 
 # --- host-only reconnection bookkeeping ------------------------------------
 # token -> {"role": String, "connected": bool}. Survives a disconnect so the
@@ -223,6 +237,8 @@ func _on_relay_host_failed(_reason: String) -> void:
 ## via the same connection_ok/connection_failed_ signals join() uses — both
 ## paths end up driven by the peer's _get_connection_status() transitions.
 func join_relay(room_id: String) -> Error:
+	_reconnect_room_id = room_id
+	_reconnect_attempts = 0
 	var peer := RelayMultiplayerPeer.create_client(relay_ws_url(), room_id)
 	multiplayer.multiplayer_peer = peer
 	return OK
@@ -233,12 +249,16 @@ func list_rooms() -> Array:
 		return []
 	if _rooms_request == null:
 		_rooms_request = HTTPRequest.new()
+		_rooms_request.timeout = 8   # seconds — fail fast so the UI isn't stuck
 		add_child(_rooms_request)
 	if _rooms_request.request(_relay_http_base() + "/rooms") != OK:
 		return []
 	_rooms_busy = true
+	_rooms_timeout = get_tree().create_timer(10.0)
+	_rooms_timeout.timeout.connect(_rooms_timeout_expired)
 	var result: Array = await _rooms_request.request_completed
 	_rooms_busy = false
+	_rooms_timeout = null
 	var response_code: int = result[1]
 	var body: PackedByteArray = result[3]
 	if response_code != 200:
@@ -259,6 +279,9 @@ func _save_last_room_name(name: String) -> void:
 	cfg.save(PREFS_PATH)
 
 func leave() -> void:
+	_reconnect_room_id = ""
+	_reconnecting = false
+	_reconnect_attempts = 0
 	multiplayer.multiplayer_peer = null
 	players.clear()
 	_slots.clear()
@@ -334,6 +357,10 @@ func _load_world(scene: String = "") -> void:
 
 func _on_connected_to_server() -> void:
 	_register.rpc_id(1, my_token())   # announce our identity to the host
+	if _reconnecting:
+		_reconnecting = false
+		_reconnect_attempts = 0
+		print("[Net] reconnected to relay room %s" % _reconnect_room_id)
 	connection_ok.emit()
 
 func _on_connection_failed() -> void:
@@ -342,6 +369,38 @@ func _on_connection_failed() -> void:
 
 func _on_server_disconnected() -> void:
 	multiplayer.multiplayer_peer = null
+	# If we were in a relay match and haven't exhausted retries, try to reconnect
+	# before surfacing the disconnect to the UI.
+	if _reconnect_room_id != "" and _reconnect_attempts < RECONNECT_MAX_ATTEMPTS:
+		_try_reconnect()
+		return
 	players.clear()
 	match_active = false
+	_reconnect_room_id = ""
+	_reconnecting = false
 	server_left.emit()
+
+func _try_reconnect() -> void:
+	_reconnecting = true
+	_reconnect_attempts += 1
+	var delay := RECONNECT_BASE_DELAY * pow(2.0, _reconnect_attempts - 1)
+	print("[Net] relay dropped, reconnect attempt %d/%d in %.1fs"
+		% [_reconnect_attempts, RECONNECT_MAX_ATTEMPTS, delay])
+	get_tree().create_timer(delay).timeout.connect(_do_reconnect, CONNECT_ONE_SHOT)
+
+func _do_reconnect() -> void:
+	var peer := RelayMultiplayerPeer.create_client(relay_ws_url(), _reconnect_room_id)
+	peer.relay_failed.connect(_on_reconnect_failed, CONNECT_ONE_SHOT)
+	multiplayer.multiplayer_peer = peer
+
+func _on_reconnect_failed(_reason: String) -> void:
+	multiplayer.multiplayer_peer = null
+	if _reconnect_attempts < RECONNECT_MAX_ATTEMPTS:
+		_try_reconnect()
+	else:
+		print("[Net] reconnect failed after %d attempts" % RECONNECT_MAX_ATTEMPTS)
+		players.clear()
+		match_active = false
+		_reconnect_room_id = ""
+		_reconnecting = false
+		server_left.emit()
