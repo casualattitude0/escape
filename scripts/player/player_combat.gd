@@ -85,12 +85,14 @@ func _runner_input(gm: Node) -> void:
 		if not _device_in_range(gm):
 			mode = Mode.ATTACK
 			return
+		if _zone_locked(gm):
+			return
 		body.animator.sabotage()
 		gm.sabotage_press.rpc_id(1)
 	else:
 		if not Input.is_action_just_pressed("attack"):
 			return
-		if _device_in_range(gm):
+		if _device_in_range(gm) and not _zone_locked(gm):
 			mode = Mode.BREAK
 			body.animator.sabotage()
 			gm.sabotage_press.rpc_id(1)
@@ -101,6 +103,10 @@ func _runner_input(gm: Node) -> void:
 			_attack_cd_left = ATTACK_CD
 			if _find_target_hunter(gm) != null:
 				gm.attack_press.rpc_id(1)
+
+## Client-side lockdown check. The server re-checks authoritatively.
+func _zone_locked(gm: Node) -> bool:
+	return gm.zone_locked_at(body.global_position)
 
 ## Is an unbroken device close enough to work on? Prediction only — the server
 ## re-derives which device (if any) from real overlaps.
@@ -133,7 +139,12 @@ func _find_target_hunter(gm: Node) -> Node2D:
 ## Hunter F: one knock per press. Play the swing locally right away so the tap
 ## feels immediate, forward it, and lock into a recovery.
 func _hunter_input(gm: Node) -> void:
-	if body.dead or _stiff_left > 0.0:
+	if body.dead:
+		return
+	if Input.is_action_just_pressed("report"):
+		gm.report_press.rpc_id(1)
+		return
+	if _stiff_left > 0.0:
 		return
 	if not Input.is_action_just_pressed("attack"):
 		return

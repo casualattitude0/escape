@@ -21,6 +21,8 @@ signal state_changed
 # a vision-clarity boost; false means the noise instead surfaces as a minimap
 # ping. The Runner peer ignores it (no Hunter UI).
 signal sound_heard(world_pos: Vector2, heard_near: bool)
+# Fired on every peer when a Hunter reports the Runner and a zone locks.
+signal zone_reported(zone_name: String)
 
 const MATCH_TIME := 300.0         # seconds; Hunters win when it hits 0 (GDD 3)
 # Mashing is noisy, but a ping per tap would be a siren. Fire one every few
@@ -29,13 +31,14 @@ const MATCH_TIME := 300.0         # seconds; Hunters win when it hits 0 (GDD 3)
 const SOUND_EVERY_HITS := 3
 
 var sound_near_radius := 540.0   # Hunters within this of a noise see clearly;
-                                 # farther ones only get a minimap ping
+								 # farther ones only get a minimap ping
 
 var winner := ""                 # "", Roles.WIN_RUNNER, Roles.WIN_HUNTERS
 var time_left := MATCH_TIME
 
 @onready var devices: DeviceSystem = $DeviceSystem
 @onready var knock: KnockSystem = $KnockSystem
+@onready var zones: ZoneSystem = $ZoneSystem
 @onready var _players: Node = get_node("../Players")
 @onready var _devices_root: Node = get_node("../Devices")
 @onready var _escape_root: Node = get_node("../Escape")
@@ -101,6 +104,57 @@ func runner_stunned() -> bool:
 func runner_iframe() -> bool:
 	return knock.invulnerable()
 
+# ---- report / lockdown (GDD 4.3) ------------------------------------------
+
+## A Hunter reports the Runner. Server validates that the Hunter can actually see
+## the Runner (fog-clear radius, not just proximity), then locks the zone the
+## Runner occupies and broadcasts a minimap ping to all Hunters.
+@rpc("any_peer", "call_local", "reliable")
+func report_press() -> void:
+	if not multiplayer.is_server() or winner != "":
+		return
+	var id := _sender_id()
+	var h: Node2D = _players.get_node_or_null(str(id))
+	if h == null or h.dead or h.get("role") != Roles.HUNTER:
+		return
+	var runner := _find_runner()
+	if runner == null:
+		return
+	# Visibility check: the Runner must be inside this Hunter's fog-clear radius.
+	# Reuses the same distance the fog shader uses for the spotting mechanic.
+	if not _hunter_can_see_runner(h, runner):
+		return
+	var z := zones.try_lockdown(runner.global_position)
+	if z == "":
+		return
+	_report_broadcast.rpc(z)
+	_broadcast(true)
+
+## True when the Runner is inside the Hunter's effective vision radius. On the
+## server we use the base radius (not the widened "wild" radius the client sees),
+## so a Hunter cannot report from further away just because their fog is swelling.
+func _hunter_can_see_runner(h: Node2D, runner: Node2D) -> bool:
+	return h.global_position.distance_to(runner.global_position) <= Fog.BASE_RADIUS
+
+@rpc("authority", "call_local", "reliable")
+func _report_broadcast(zone_name: String) -> void:
+	zone_reported.emit(zone_name)
+
+## Read facade: is the zone at `pos` currently locked?
+func zone_locked_at(pos: Vector2) -> bool:
+	return zones.is_locked(pos)
+
+## Read facade: lockdown seconds remaining for the zone containing `pos`.
+func zone_lockdown_left(pos: Vector2) -> float:
+	var z := zones.zone_at(pos)
+	if z == "":
+		return 0.0
+	return zones.lockdown.get(z, 0.0)
+
+## Read facade: full zone data for minimap/HUD.
+func zone_data() -> ZoneSystem:
+	return zones
+
 # ---- sabotage (GDD 4.1) ---------------------------------------------------
 
 ## The Runner mashed at a device. Which device is the SERVER's call: we ask the
@@ -123,6 +177,11 @@ func sabotage_press() -> void:
 		return
 	var idx := _device_at_runner()
 	if idx < 0:
+		return
+	# Zone lockdown blocks sabotage (GDD 4.3): the device is still there, but
+	# the Runner cannot progress on it while the zone is locked.
+	var device_node: Node2D = _devices_root.get_node_or_null("Device%d" % idx)
+	if device_node != null and zones.is_locked(device_node.global_position):
 		return
 	var finished := devices.hit(idx)
 	_emit_sabotage_sound(idx, runner)
@@ -301,6 +360,8 @@ func _physics_process(delta: float) -> void:
 		_broadcast(false)
 	if knock.tick(delta):
 		_broadcast(false)
+	if zones.tick(delta):
+		_broadcast(false)
 	# Keep the clock (and any drift) in sync a couple times a second.
 	_sync_accum += delta
 	if _sync_accum >= 0.5:
@@ -332,6 +393,7 @@ func _set_winner(w: String) -> void:
 	winner = w
 	knock.force_end()
 	devices.force_end()
+	zones.force_end()
 	_broadcast(true)
 	# The round is over — drop any dev snapshot so the next launch starts fresh.
 	if DevSnapshot.enabled():
@@ -343,7 +405,7 @@ func _set_winner(w: String) -> void:
 ## a snapshot from the old grapple/key build has `installs` and no device
 ## progress, so restoring it would silently produce a nonsense round (every device
 ## intact, but the state it was saved with long gone) rather than fail loudly.
-const SNAPSHOT_VERSION := 2
+const SNAPSHOT_VERSION := 3
 
 func snapshot_state() -> Dictionary:
 	return {
@@ -356,6 +418,7 @@ func snapshot_state() -> Dictionary:
 		"decay": knock.decay_left,
 		"iframe": knock.iframe_left,
 		"stun": knock.stun_left,
+		"zones": zones.snapshot(),
 	}
 
 func restore_state(d: Dictionary) -> void:
@@ -369,6 +432,7 @@ func restore_state(d: Dictionary) -> void:
 	knock.decay_left = float(d.get("decay", 0.0))
 	knock.iframe_left = float(d.get("iframe", 0.0))
 	knock.stun_left = float(d.get("stun", 0.0))
+	zones.restore(d.get("zones", {}))
 	_broadcast(true)   # push the restored state to every peer's HUD
 
 func _state_dict() -> Dictionary:
@@ -380,6 +444,8 @@ func _state_dict() -> Dictionary:
 		"iframe": knock.iframe_left,
 		"stun": knock.stun_left,
 		"winner": winner,
+		"zlock": zones.lockdown,
+		"zcool": zones.cooldown,
 	}
 
 func _apply_state(d: Dictionary) -> void:
@@ -392,6 +458,8 @@ func _apply_state(d: Dictionary) -> void:
 	knock.iframe_left = float(d.get("iframe", 0.0))
 	knock.stun_left = float(d.get("stun", 0.0))
 	winner = str(d.get("winner", ""))
+	zones.lockdown = (d.get("zlock", {}) as Dictionary).duplicate()
+	zones.cooldown = (d.get("zcool", {}) as Dictionary).duplicate()
 	state_changed.emit()
 
 func _broadcast(reliable: bool) -> void:

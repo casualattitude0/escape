@@ -7,8 +7,8 @@ extends CanvasLayer
 @onready var items_label: Label = %ItemsLabel
 @onready var timer_label: Label = %TimerLabel
 @onready var hint_label: Label = %HintLabel
-@onready var capture_label: Label = %CaptureLabel
-@onready var capture_bar: ProgressBar = %CaptureBar
+@onready var lockdown_label: Label = %CaptureLabel
+@onready var lockdown_bar: ProgressBar = %CaptureBar
 @onready var escape_label: Label = %EscapeLabel
 @onready var escape_bar: ProgressBar = %EscapeBar
 @onready var mash_prompt: Label = %BreakFree
@@ -17,6 +17,7 @@ extends CanvasLayer
 var _gm: Node
 var _my_role := Roles.HUNTER
 var _my_combat: PlayerCombat
+var _my_player: Node2D
 
 func _ready() -> void:
 	_my_role = Net.players.get(multiplayer.get_unique_id(), Roles.HUNTER)
@@ -25,14 +26,21 @@ func _ready() -> void:
 		_gm.state_changed.connect(_refresh)
 	role_label.text = "You are: Runner (escape)" if _my_role == Roles.RUNNER else "You are: Hunter (contain)"
 	role_label.modulate = Color(1, 0, 0)
+	lockdown_label.visible = false
+	lockdown_bar.visible = false
 	if _my_role == Roles.RUNNER:
 		hint_label.text = "A/D move · Space jump · Shift slide · F attack (near device: break)"
 		for c in get_tree().get_first_node_in_group("game_manager").players().get_children():
 			if c.is_multiplayer_authority():
 				_my_combat = c.combat
+				_my_player = c
 				break
 	else:
-		hint_label.text = "A/D move · Space jump\nF to knock the Runner. 3 knocks stun it. Run out the clock."
+		hint_label.text = "A/D move · Space jump · F knock · R report\n3 knocks stun. Report locks zones. Run out the clock."
+		for c in get_tree().get_first_node_in_group("game_manager").players().get_children():
+			if c.is_multiplayer_authority():
+				_my_player = c
+				break
 	_refresh()
 
 func _process(_delta: float) -> void:
@@ -44,6 +52,7 @@ func _process(_delta: float) -> void:
 	if _my_combat != null:
 		var mode_name := "BREAK" if _my_combat.mode == PlayerCombat.Mode.BREAK else "ATTACK"
 		role_label.text = "You are: Runner (escape)  [%s]" % mode_name
+	_update_lockdown()
 
 func _refresh() -> void:
 	if _gm == null:
@@ -84,3 +93,23 @@ func _refresh() -> void:
 		banner.text = "Time's up — the monster is contained!"
 	banner.text += "\n" + ("You win!" if won else "You lose")
 	banner.modulate = Color(1, 0, 0)
+
+func _update_lockdown() -> void:
+	if _gm == null or _gm.winner != "":
+		lockdown_label.visible = false
+		lockdown_bar.visible = false
+		return
+	if _my_player == null or not is_instance_valid(_my_player):
+		_my_player = _gm.players().get_node_or_null(str(multiplayer.get_unique_id()))
+	if _my_player == null:
+		return
+	var left: float = _gm.zone_lockdown_left(_my_player.global_position)
+	if left > 0.0:
+		lockdown_label.visible = true
+		lockdown_bar.visible = true
+		lockdown_label.text = "ZONE LOCKED" if _my_role == Roles.RUNNER else "LOCKDOWN ACTIVE"
+		lockdown_label.modulate = Color(1, 0.3, 0.3)
+		lockdown_bar.value = (left / ZoneSystem.LOCKDOWN_TIME) * 100.0
+	else:
+		lockdown_label.visible = false
+		lockdown_bar.visible = false

@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://cuk022c1is02j" path="res://scripts/ui/hud.gd" id="6"]
 [ext_resource type="Script" uid="uid://6ckk13jxob67" path="res://scripts/world/device_system.gd" id="7"]
 [ext_resource type="Script" uid="uid://uno1eq7wayiy" path="res://scripts/world/knock_system.gd" id="8"]
+[ext_resource type="Script" uid="uid://3jq67mskbe6x" path="res://scripts/world/zone_system.gd" id="11"]
 [ext_resource type="Script" uid="uid://bvdoj0u0jj4nu" path="res://scripts/ui/fog.gd" id="9"]
 [ext_resource type="Script" uid="uid://ba58li2l7sylr" path="res://scripts/ui/minimap.gd" id="10"]
 
@@ -37,6 +38,9 @@ script = ExtResource("7")
 
 [node name="KnockSystem" type="Node" parent="GameManager" unique_id=854305403]
 script = ExtResource("8")
+
+[node name="ZoneSystem" type="Node" parent="GameManager"]
+script = ExtResource("11")
 
 [node name="Devices" type="Node2D" parent="." unique_id=124564449]
 

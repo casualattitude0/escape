@@ -214,8 +214,10 @@ func _resume_point(id: int, role: String) -> Variant:
 ## Devices need no per-node restore: they never move, and their damage lives in
 ## the GameManager's replicated state, so restore_state below repaints them.
 func _after_layout() -> void:
+	var gm := get_tree().get_first_node_in_group("game_manager")
+	if gm != null:
+		gm.zones.use_layout2()
 	if not _resume.is_empty():
-		var gm := get_tree().get_first_node_in_group("game_manager")
 		if gm != null:
 			gm.restore_state(_resume.get("gm", {}))
 	if DevSnapshot.enabled():

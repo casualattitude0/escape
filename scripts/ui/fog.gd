@@ -1,4 +1,5 @@
 extends ColorRect
+class_name Fog
 
 ## Restricted vision (GDD 4.2). A full-screen pale (white) fog overlay with a
 ## soft "clear" circle centred on the local player, so no one can read the whole
