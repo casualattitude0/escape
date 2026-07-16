@@ -37,6 +37,7 @@ func _ready() -> void:
 	camera.enabled = is_multiplayer_authority()
 	if is_multiplayer_authority():
 		camera.make_current()
+		camera.reset_smoothing()
 	# Throttle replication to ~22Hz instead of once per physics frame. The default
 	# (interval 0) sends position every tick, which floods the (high-latency) relay
 	# and makes packets queue up; 0.045s is plenty smooth for this game and cuts the
