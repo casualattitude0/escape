@@ -22,7 +22,7 @@ signal state_changed
 # ping. The Runner peer ignores it (no Hunter UI).
 signal sound_heard(world_pos: Vector2, heard_near: bool)
 
-const MATCH_TIME := 90.0          # seconds; Hunters win when it hits 0 (GDD 3)
+const MATCH_TIME := 300.0         # seconds; Hunters win when it hits 0 (GDD 3)
 # Mashing is noisy, but a ping per tap would be a siren. Fire one every few
 # accepted hits instead: ~4 tells per device. Counted in hits, not in fractions
 # of progress, so there is no float boundary to land wrong side of.
