@@ -154,8 +154,20 @@ func _hunter_input(gm: Node) -> void:
 	if not Input.is_action_just_pressed("attack"):
 		return
 	body.animator.knock()
-	gm.hunter_press.rpc_id(1)
+	gm.hunter_press.rpc_id(1, _render_host_time(gm))
 	_stiff_left = KNOCK_HIT_STIFF if _knock_would_hit(gm) else KNOCK_WHIFF_STIFF
+
+## Host-clock timestamp of the Runner state this player is RENDERING right now,
+## sent with the knock so the server can rewind its range test to it (lag
+## compensation, game_manager.hunter_press). What we render is interp_delay in
+## the past of the sample stream, and each sample took ~rtt/2 to reach us — so
+## walk back both from our host-aligned clock. On a hosting player everything
+## degrades to ~now (offset 0, rtt 0, and a remote runner's real interp delay).
+func _render_host_time(gm: Node) -> int:
+	var r := _find_runner(gm)
+	var delay: float = r.interp.interp_delay_ms if r != null else 0.0
+	return int(Time.get_ticks_msec() + Net.stats.host_time_offset
+		- delay - Net.stats.rtt(1) * 0.5)
 
 ## Server confirmed a kill: start the local cooldown mirror. Driven from the
 ## server rather than from the press so a rejected swing never costs the Runner.

@@ -46,6 +46,14 @@ var time_left := MATCH_TIME
 @onready var _elevators_root: Node = get_node("../Elevators")
 @onready var _terrain: TileMapLayer = get_node("../Terrain")
 
+# Lag compensation: how far back hunter_press may rewind the Runner. Bounds the
+# cheat surface (a doctored timestamp can never claim more than this) while
+# still covering interp delay + a bad ping.
+const LAGCOMP_MAX_REWIND_MS := 300
+
+# Host-only recent-position history, fed each physics tick (see pos_history.gd).
+var pos_history := PosHistory.new()
+
 var _sync_accum := 0.0           # cadence for periodic (clock) fast syncs
 var _last_sound_slice := {}      # device index -> last progress slice that made noise
 # Server's copy of the Runner's kill cooldown. Ticked off physics delta rather
@@ -277,8 +285,17 @@ func _sound(world_pos: Vector2, near_ids: Array) -> void:
 ## One Hunter swung at the Runner. Every gate here is the server's call — the
 ## client's own range test (player_combat) is only prediction.
 ## call_local so this still works if a Hunter ever hosts — see sabotage_press.
+##
+## `render_host_time` is the host-clock timestamp of the Runner state the Hunter
+## was RENDERING when it pressed (see player_combat._render_host_time). The range
+## test rewinds the Runner to that moment (lag compensation): the Hunter aims at
+## what it sees, and what it sees is interp_delay + transit in the past — judging
+## against the Runner's *current* position makes every knock on a moving Runner
+## whiff for remote players. 0 (or an out-of-window value) degrades to the plain
+## current-position test. Only position rewinds; iframe/stun pacing stays on the
+## server's current state so compensation can never squeeze extra knocks in.
 @rpc("any_peer", "call_local", "reliable")
-func hunter_press() -> void:
+func hunter_press(render_host_time: int = 0) -> void:
 	if not multiplayer.is_server() or winner != "":
 		return
 	var id := _sender_id()
@@ -288,7 +305,14 @@ func hunter_press() -> void:
 		return
 	if h.get("role") != Roles.HUNTER:
 		return
-	if not _in_range(h, runner):
+	var runner_pos: Vector2 = runner.global_position
+	if render_host_time > 0:
+		var now := Time.get_ticks_msec()
+		var rewind_to := clampi(render_host_time, now - LAGCOMP_MAX_REWIND_MS, now)
+		var past := pos_history.sample(runner.name.to_int(), float(rewind_to))
+		if not past.is_empty():
+			runner_pos = past["pos"]
+	if not _in_range(h, runner_pos):
 		return
 	if not knock.can_knock():
 		return          # inside an iframe, or already stunned
@@ -304,6 +328,12 @@ func hunter_press() -> void:
 ## The Runner swung at a Hunter. A kill buys the Runner time and a lane, not a
 ## removed opponent — Hunters respawn forever (GDD 4.6).
 ## call_local is required — see sabotage_press.
+##
+## No lag compensation here, deliberately: the Runner IS the host, so there is no
+## network delay on its press, and the Hunters' global_position on the host is
+## the interpolated value the Runner was rendering — _kill_target already tests
+## exactly what the Runner saw. (If a Hunter ever hosts, the symmetric case is
+## covered by hunter_press's rewind.)
 @rpc("any_peer", "call_local", "reliable")
 func attack_press() -> void:
 	if not multiplayer.is_server() or winner != "":
@@ -375,6 +405,13 @@ func _on_stun() -> void:
 func _physics_process(delta: float) -> void:
 	if winner != "":
 		return
+	# Feed the lag-comp history (server only — physics is off elsewhere). Note
+	# that remote players' global_position here is the interpolated (rendered)
+	# value, which is exactly the timeline hunter_press rewinds within.
+	var now_ms := float(Time.get_ticks_msec())
+	for c in _players.get_children():
+		pos_history.record(c.name.to_int(), now_ms, c.global_position,
+			bool(c.get("dead")), bool(c.get("stunned")))
 	# Match clock: Hunters win if it runs out (GDD 3).
 	time_left = maxf(0.0, time_left - delta)
 	if time_left <= 0.0:
@@ -410,8 +447,8 @@ func _sender_id() -> int:
 	var id := multiplayer.get_remote_sender_id()
 	return multiplayer.get_unique_id() if id == 0 else id
 
-func _in_range(h: Node2D, runner: Node2D) -> bool:
-	return h.global_position.distance_to(runner.global_position) <= KnockSystem.KNOCK_RANGE
+func _in_range(h: Node2D, runner_pos: Vector2) -> bool:
+	return h.global_position.distance_to(runner_pos) <= KnockSystem.KNOCK_RANGE
 
 func _find_runner() -> Node2D:
 	for c in _players.get_children():
@@ -472,6 +509,9 @@ func restore_state(d: Dictionary) -> void:
 
 func _state_dict() -> Dictionary:
 	return {
+		# Host clock, so clients can maintain a host-time offset for lag comp
+		# (see NetStats.note_host_time). Rides the existing ≥2 Hz sync for free.
+		"ht": Time.get_ticks_msec(),
 		"prog": devices.progress,
 		"active": devices.active_index,
 		"time": time_left,
@@ -484,6 +524,8 @@ func _state_dict() -> Dictionary:
 	}
 
 func _apply_state(d: Dictionary) -> void:
+	if not multiplayer.is_server():
+		Net.stats.note_host_time(int(d.get("ht", 0)))
 	# duplicate(), not the dict itself: _sync_state is call_local, so on the host
 	# the incoming dict IS the live one and aliasing it would tie the two together.
 	devices.progress = (d.get("prog", {}) as Dictionary).duplicate()
