@@ -40,6 +40,11 @@ type controlMsg struct {
 	RoomID     string `json:"room_id,omitempty"`
 	PeerID     uint32 `json:"peer_id,omitempty"`
 	Reason     string `json:"reason,omitempty"`
+	// Payload is the opaque body of an "rtc" message (WebRTC signaling: SDP
+	// offers/answers, ICE candidates, path-switch markers). The relay never
+	// parses it — it only routes: host->relay carries PeerID naming the target
+	// client; relay->host stamps PeerID with the sending client.
+	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
 // conn wraps a websocket.Conn with a write mutex — gorilla/websocket forbids
@@ -159,6 +164,28 @@ func (r *room) forwardFromHost(target uint32, payload []byte) {
 	}
 	if c, ok := r.clients[target]; ok {
 		c.sendData(payload)
+	}
+}
+
+// forwardRTCToClient relays a host-sent "rtc" control message to one client,
+// with the routing PeerID stripped (a client only ever signals with the host).
+func (r *room) forwardRTCToClient(target uint32, payload json.RawMessage) {
+	r.mu.Lock()
+	c, ok := r.clients[target]
+	r.mu.Unlock()
+	if ok {
+		c.sendControl(controlMsg{Op: "rtc", Payload: payload})
+	}
+}
+
+// forwardRTCToHost relays a client-sent "rtc" control message to the host,
+// stamped with the sender's peer id.
+func (r *room) forwardRTCToHost(from uint32, payload json.RawMessage) {
+	r.mu.Lock()
+	host := r.host
+	r.mu.Unlock()
+	if host != nil {
+		host.sendControl(controlMsg{Op: "rtc", PeerID: from, Payload: payload})
 	}
 }
 
@@ -352,6 +379,16 @@ func runHost(c *conn, msg controlMsg) {
 		if err != nil {
 			return
 		}
+		if frameType == frameControl {
+			// Post-handshake control from the host: only "rtc" signaling is
+			// routed; anything else (pings, unknown future ops) is ignored, so
+			// old and new builds interoperate without a protocol version.
+			var m controlMsg
+			if json.Unmarshal(payload, &m) == nil && m.Op == "rtc" && m.PeerID != 0 {
+				rm.forwardRTCToClient(m.PeerID, m.Payload)
+			}
+			continue
+		}
 		if frameType != frameData || len(payload) < 4 {
 			continue
 		}
@@ -387,6 +424,13 @@ func runClient(c *conn, msg controlMsg) {
 		frameType, payload, err := readFrame(c.ws)
 		if err != nil {
 			return
+		}
+		if frameType == frameControl {
+			var m controlMsg
+			if json.Unmarshal(payload, &m) == nil && m.Op == "rtc" {
+				rm.forwardRTCToHost(peerID, m.Payload)
+			}
+			continue
 		}
 		if frameType != frameData {
 			continue

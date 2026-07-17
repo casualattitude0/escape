@@ -149,6 +149,60 @@ func TestHostJoinAndBidirectionalData(t *testing.T) {
 	}
 }
 
+// The relay must route "rtc" control messages (WebRTC signaling envelopes)
+// both ways — target-addressed host->client, sender-stamped client->host —
+// without parsing the payload, and without disturbing the data path. Unknown
+// post-handshake control ops must stay ignored (old/new build interop).
+func TestRTCSignalingRouting(t *testing.T) {
+	_, wsURL := startTestServer(t)
+
+	host := dial(t, wsURL)
+	sendCtrl(t, host, controlMsg{Op: "host", Name: "RTC Room", MaxPlayers: 4})
+	hosted := readCtrl(t, host)
+	if hosted.Op != "hosted" {
+		t.Fatalf("unexpected hosted reply: %+v", hosted)
+	}
+
+	client := dial(t, wsURL)
+	sendCtrl(t, client, controlMsg{Op: "join", RoomID: hosted.RoomID})
+	if joined := readCtrl(t, client); joined.Op != "joined" || joined.PeerID != 2 {
+		t.Fatalf("unexpected joined reply: %+v", joined)
+	}
+	if pj := readCtrl(t, host); pj.Op != "peer_joined" {
+		t.Fatalf("host did not get peer_joined: %+v", pj)
+	}
+
+	// host -> client: routed by PeerID, payload untouched, no PeerID leaked.
+	offer := json.RawMessage(`{"kind":"offer","sdp":"v=0 fake"}`)
+	sendCtrl(t, host, controlMsg{Op: "rtc", PeerID: 2, Payload: offer})
+	got := readCtrl(t, client)
+	if got.Op != "rtc" || got.PeerID != 0 || string(got.Payload) != string(offer) {
+		t.Fatalf("client got %+v payload=%s", got, got.Payload)
+	}
+
+	// client -> host: stamped with the sender's peer id.
+	answer := json.RawMessage(`{"kind":"answer","sdp":"v=0 fake"}`)
+	sendCtrl(t, client, controlMsg{Op: "rtc", Payload: answer})
+	got = readCtrl(t, host)
+	if got.Op != "rtc" || got.PeerID != 2 || string(got.Payload) != string(answer) {
+		t.Fatalf("host got %+v payload=%s", got, got.Payload)
+	}
+
+	// Unknown control ops (both directions) are ignored, and an rtc to a
+	// nonexistent peer is dropped — none of it may stall the data path.
+	sendCtrl(t, host, controlMsg{Op: "future_op"})
+	sendCtrl(t, client, controlMsg{Op: "ping"})
+	sendCtrl(t, host, controlMsg{Op: "rtc", PeerID: 99, Payload: offer})
+	sendData(t, host, 2, []byte("still-works"))
+	if payload := readDataPlain(t, client); string(payload) != "still-works" {
+		t.Fatalf("data path broken after control noise: %q", payload)
+	}
+	sendClientData(t, client, []byte("uphill"))
+	if from, payload := readDataTagged(t, host); from != 2 || string(payload) != "uphill" {
+		t.Fatalf("host got from=%d payload=%q", from, payload)
+	}
+}
+
 func TestJoinUnknownRoom(t *testing.T) {
 	_, wsURL := startTestServer(t)
 	client := dial(t, wsURL)
