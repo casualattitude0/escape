@@ -21,6 +21,17 @@ const KNOCK_STAGGER := 0.38  # Runner: no steering right after a knock, so the s
 @onready var effects: PlayerEffects = $Effects
 
 # Replicated state (the MultiplayerSynchronizer references these on this node).
+# Position replicates as net_pos (not .position) so the receiving side can
+# buffer + interpolate instead of snapping — see net_interp.gd for why.
+var net_pos: Vector2:
+	set(value):
+		net_pos = value
+		# Pre-tree writes happen while world._spawn_player builds the node (which
+		# also sets .position directly, so placement is covered) — and authority
+		# can't even be queried outside the tree.
+		if not is_inside_tree() or is_multiplayer_authority():
+			return
+		interp.push(value)
 var role: String = Roles.HUNTER
 var net_anim: String = Anim.IDLE
 var net_flip: bool = false
@@ -39,26 +50,42 @@ var _ride_timer: float = 0.0
 # The GameManager (server-authoritative match state), found once.
 var gm: Node
 
+# Interpolation buffer for this body when it is a REMOTE player (non-authority).
+# Public: lag compensation reads interp.interp_delay_ms (player_combat.gd).
+var interp := NetInterp.new()
+
 func _ready() -> void:
 	camera.enabled = is_multiplayer_authority()
 	if is_multiplayer_authority():
 		camera.make_current()
 		camera.reset_smoothing()
-	# Throttle replication to ~22Hz instead of once per physics frame. The default
-	# (interval 0) sends position every tick, which floods the (high-latency) relay
-	# and makes packets queue up; 0.045s is plenty smooth for this game and cuts the
-	# outbound packet rate to roughly a third. See net.gd for the relay path.
-	$Sync.replication_interval = 0.045
-	$Sync.delta_interval = 0.045
+	_apply_sync_rate()
+	Net.transport_changed.connect(_apply_sync_rate)
 	gm = get_tree().get_first_node_in_group("game_manager")
 
+## Replication rate by transport. The default (interval 0) sends every physics
+## tick, which floods the relay and queues packets. LAN / P2P links can afford
+## ~33 Hz; the relay path keeps the proven 22 Hz. The receive-side interp delay
+## is derived from the same interval so a rate change retunes both ends.
+func _apply_sync_rate() -> void:
+	var iv := 0.045 if Net.transport_kind() == "RELAY" else 0.03
+	$Sync.replication_interval = iv
+	$Sync.delta_interval = iv
+	interp.set_send_interval(iv)
+
 func _process(delta: float) -> void:
+	if not is_multiplayer_authority():
+		# Remote body: draw it interp_delay in the past, between known samples.
+		var target = interp.sample(float(Time.get_ticks_msec()))
+		if target != null:
+			global_position = target
 	animator.render()
 	effects.render(delta)   # squash/stretch + dust: every peer, keyed off net_anim/net_flip
 
 func _physics_process(delta: float) -> void:
 	if not is_multiplayer_authority():
 		return
+	net_pos = global_position   # publish for remote peers (sampled by $Sync)
 
 	health.tick(delta)
 	if dead:

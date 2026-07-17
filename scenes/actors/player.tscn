@@ -16,7 +16,7 @@ height = 50.0
 size = Vector2(16, 18)
 
 [sub_resource type="SceneReplicationConfig" id="rep"]
-properties/0/path = NodePath(".:position")
+properties/0/path = NodePath(".:net_pos")
 properties/0/spawn = true
 properties/0/replication_mode = 1
 properties/1/path = NodePath(".:role")

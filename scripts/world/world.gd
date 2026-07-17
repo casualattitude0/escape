@@ -173,6 +173,10 @@ func _spawn_player(id: int) -> Node:
 	var resumed = _resume_point(id, role)
 	# Start where the player last was (dev resume / rejoin); respawn point stays real.
 	p.position = resumed if resumed != null else base
+	# Position replicates as net_pos (see player.gd) — the spawner captures its
+	# spawn-state from the host's copy, so it must carry the spawn spot too, or
+	# every remote copy starts at (0,0) until the owner's first sync arrives.
+	p.net_pos = p.position
 	p.spawn_point = base
 	return p
 
