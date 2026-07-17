@@ -11,3 +11,6 @@
 # Python tooling
 __pycache__/
 *.pyc
+
+# Go build output
+/relay-server/relay-server

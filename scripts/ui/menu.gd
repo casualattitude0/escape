@@ -983,6 +983,8 @@ func _unhandled_input(event: InputEvent) -> void:
 ##   joinrelay=<room_id>   join a relay room directly, skipping the browse list
 ##   relay=<url>       point host_online/join_relay at a local relay-server
 ##   port=<n> / token=<t> / auto
+##   fakelag=<ms>      delay all incoming packets (dev latency sim, F3 overlay)
+##   p2p=off           relay rooms: skip WebRTC, force all traffic via relay
 ##
 ## With no tokens, running from the editor (Net.DEV_AUTOCONNECT) the two windows
 ## self-negotiate: each tries to host, whoever binds the port first is the
@@ -1020,6 +1022,10 @@ func _handle_cli() -> void:
 			Net.set_token(arg.split("=")[1])
 		elif arg.begins_with("relay="):
 			Net.set_relay_url_override(arg.split("=", true, 1)[1])
+		elif arg.begins_with("fakelag="):
+			Net.set_fakelag_ms(int(arg.split("=")[1]))
+		elif arg == "p2p=off":
+			Net.set_p2p_enabled(false)
 	# If we deliberately left to the menu, stay at the lobby on launch instead of
 	# auto-reconnecting. Persists across every launch (and both editor instances)
 	# until the player deliberately reconnects — see _clear_left_to_menu callers.

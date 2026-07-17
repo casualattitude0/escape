@@ -11,17 +11,21 @@ const PREFS_PATH := "user://net.cfg"   # remembers the last address you joined
 ## Deployed relay server's WebSocket endpoint (see relay-server/, deployed to
 ## GCP project escape-502321 / Cloud Run service "escape-relay", asia-east1 —
 ## Taiwan, since the playerbase is in Asia; a us-central1 relay added ~150ms).
-## Lets any player host or join over the internet with no port-forwarding, by
-## routing traffic through this always-on relay instead of connecting
-## host<->client directly — see RelayMultiplayerPeer and relay-server/main.go
-## for the wire protocol. Override for local testing with the "relay=<url>"
-## CLI token (see menu.gd _handle_cli) or by calling set_relay_url_override().
+## Lets any player host or join over the internet with no port-forwarding.
+## Since the WebRTC hybrid (see RelayMultiplayerPeer), the relay's jobs are:
+## room directory + control, WebRTC signaling, and carrying data only for
+## peers whose direct P2P link fails (symmetric NAT etc.) — everyone else's
+## traffic flows host<->client directly over UDP data channels. Override for
+## local testing with the "relay=<url>" CLI token (see menu.gd _handle_cli)
+## or by calling set_relay_url_override().
 const RELAY_WS_URL := "wss://escape-relay-562296751796.asia-east1.run.app/connect"
 
-## WebSocketMultiplayerPeer (not ENet) so a web-exported client can Join a
-## game — browsers can't open raw UDP sockets, only WebSocket ones. A browser
-## tab still can't bind a listening socket, so Host stays native-only; Join
-## works from both native and web builds. See host()/join()/_make_url().
+## LAN host()/join() stays on WebSocketMultiplayerPeer (not ENet) so a
+## web-exported client can Join a game — browsers can't open raw UDP sockets,
+## only WebSocket ones. A browser tab still can't bind a listening socket, so
+## Host stays native-only; Join works from both native and web builds. See
+## host()/join()/_make_url(). (Relay rooms upgrade to WebRTC per-peer; the
+## desktop builds ship the webrtc-native GDExtension in addons/webrtc_native.)
 
 # Editor-only dev loop: when running from the editor with no launch tokens, the
 # lobby self-negotiates host/join across the two windows and resumes the match,
@@ -35,6 +39,7 @@ signal connection_ok            # this client finished connecting
 signal connection_failed_       # this client could not connect
 signal server_left              # the host went away
 signal hosted_online(room_id: String)   # host_online() finished registering with the relay
+signal transport_changed        # the traffic path changed (e.g. P2P <-> relay, Phase 4)
 
 # peer_id -> role ("runner" / "hunter"). Mirrored on every peer.
 var players: Dictionary = {}
@@ -97,7 +102,22 @@ var _reconnecting := false
 var _slots: Dictionary = {}
 var _peer_token: Dictionary = {}   # live peer_id -> token
 
+# Dev fake latency (ms, one-way, incoming side) from the "fakelag=<n>" launch
+# token. When > 0 every peer we create is wrapped in a LagPeer (see lag_peer.gd).
+var fakelag_ms := 0
+
+# "p2p=off" launch token: force all relay-room traffic onto the relay path
+# (no WebRTC offers / answers). A/B testing and the emergency kill switch.
+var p2p_enabled := true
+
+# RTT probe + F3 debug overlay, added as a named child so its RPCs resolve at
+# the same path ("/root/Net/Stats") on every peer.
+var stats: NetStats
+
 func _ready() -> void:
+	stats = NetStats.new()
+	stats.name = "Stats"
+	add_child(stats)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -115,6 +135,56 @@ func set_port_override(p: int) -> void:
 
 func set_token(token: String) -> void:
 	_my_token = token
+
+func set_fakelag_ms(ms: int) -> void:
+	fakelag_ms = ms
+
+func set_p2p_enabled(v: bool) -> void:
+	p2p_enabled = v
+
+## Installs a freshly created peer as the active one, wrapping it in a LagPeer
+## first when fakelag is on. Every host/join path goes through here so the
+## fakelag token affects LAN and relay sessions alike.
+func _activate_peer(peer: MultiplayerPeer) -> void:
+	if peer is RelayMultiplayerPeer:
+		peer.p2p_enabled = p2p_enabled
+		# Re-broadcast per-link path changes: player.gd retunes its send rate,
+		# the F3 overlay repaints.
+		peer.transport_changed.connect(func(_peer: int, _p2p: bool) -> void:
+			transport_changed.emit())
+	if fakelag_ms > 0:
+		peer = LagPeer.create(peer, fakelag_ms)
+	multiplayer.multiplayer_peer = peer
+
+## The raw peer under any LagPeer wrapper, or null when offline.
+func _base_peer() -> MultiplayerPeer:
+	var p := multiplayer.multiplayer_peer
+	if p == null or p is OfflineMultiplayerPeer:
+		return null
+	if p is LagPeer:
+		p = p.inner
+	return p
+
+## What carries this session's traffic: "LAN" (direct WebSocket), "P2P" (every
+## relay-room link direct), "RELAY" (at least one peer still relayed), or
+## "NONE". Drives the debug overlay and the adaptive replication rate
+## (player.gd) — a mixed room paces for its slowest path.
+func transport_kind() -> String:
+	var p := _base_peer()
+	if p == null:
+		return "NONE"
+	if p is RelayMultiplayerPeer:
+		# get_unique_id(), not is_server(): script-defined MultiplayerPeerExtension
+		# overrides don't surface is_server() as a callable method.
+		if p.get_unique_id() == 1:
+			return "P2P" if p.all_links_p2p() else "RELAY"
+		return "P2P" if p.link_is_p2p(1) else "RELAY"
+	return "LAN"
+
+## Whether traffic to `peer_id` runs over a direct WebRTC link right now.
+func link_is_p2p(peer_id: int) -> bool:
+	var p := _base_peer()
+	return p is RelayMultiplayerPeer and p.link_is_p2p(peer_id)
 
 ## This client's stable identity. Generated once and stored in user://, so a
 ## reconnect after a drop or restart presents the same id and reclaims the slot.
@@ -137,7 +207,7 @@ func host() -> Error:
 	var err := peer.create_server(port())
 	if err != OK:
 		return err
-	multiplayer.multiplayer_peer = peer
+	_activate_peer(peer)
 	players = {1: Roles.RUNNER}
 	_slots.clear()
 	_peer_token.clear()
@@ -149,7 +219,7 @@ func join(address: String) -> Error:
 	var err := peer.create_client(_make_url(address))
 	if err != OK:
 		return err
-	multiplayer.multiplayer_peer = peer
+	_activate_peer(peer)
 	_save_last_address(address)
 	return OK
 
@@ -216,7 +286,7 @@ func host_online(room_name: String, max_players: int = MAX_CLIENTS) -> Error:
 	var peer := RelayMultiplayerPeer.create_host(relay_ws_url(), room_name, max_players)
 	peer.relay_connected.connect(_on_relay_hosted, CONNECT_ONE_SHOT)
 	peer.relay_failed.connect(_on_relay_host_failed, CONNECT_ONE_SHOT)
-	multiplayer.multiplayer_peer = peer
+	_activate_peer(peer)
 	players = {1: Roles.RUNNER}
 	_slots.clear()
 	_peer_token.clear()
@@ -240,7 +310,7 @@ func join_relay(room_id: String) -> Error:
 	_reconnect_room_id = room_id
 	_reconnect_attempts = 0
 	var peer := RelayMultiplayerPeer.create_client(relay_ws_url(), room_id)
-	multiplayer.multiplayer_peer = peer
+	_activate_peer(peer)
 	return OK
 
 ## Queries the relay's open-room directory. Coroutine — callers must `await`.
@@ -391,7 +461,7 @@ func _try_reconnect() -> void:
 func _do_reconnect() -> void:
 	var peer := RelayMultiplayerPeer.create_client(relay_ws_url(), _reconnect_room_id)
 	peer.relay_failed.connect(_on_reconnect_failed, CONNECT_ONE_SHOT)
-	multiplayer.multiplayer_peer = peer
+	_activate_peer(peer)
 
 func _on_reconnect_failed(_reason: String) -> void:
 	multiplayer.multiplayer_peer = null
