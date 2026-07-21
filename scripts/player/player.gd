@@ -139,6 +139,7 @@ func _physics_process(delta: float) -> void:
 			velocity = Vector2(out_dir * POP_OUT_SPEED, POP_UP_SPEED)
 			net_pos = mouth
 			tunneling = false
+			sprite.visible = true        # show the character again once out of the pipe
 			camera.offset = Vector2.ZERO
 			if gm != null:
 				gm.emit_sound(mouth)
@@ -186,6 +187,7 @@ func _physics_process(delta: float) -> void:
 			_tunnel_fwd = signf(_tunnel_b.x - _tunnel_a.x)
 			_tunnel_at_b = true          # whisk them to the far end, held inside, peeking out
 			tunneling = true
+			sprite.visible = false       # hide the character while it's inside the pipe
 			velocity = Vector2.ZERO
 			global_position = _tunnel_b_in
 			net_pos = global_position
