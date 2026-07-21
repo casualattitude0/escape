@@ -31,6 +31,13 @@ var _layout_built := false
 var _resume: Dictionary = {}
 var _active_seed := 0
 
+# Authored device tiles: which Device_tiles cells belong to each device index, so a
+# destroyed device's tiles can be erased (the in-world "broken" tell). Empty on the
+# procedural fallback path (those devices have no authored tiles).
+var _device_tiles: TileMapLayer
+var _device_cells := {}       # device index -> Array[Vector2i]
+var _device_cleared := {}     # device index -> true once its tiles are erased
+
 func _read_spawns() -> void:
 	var rs := get_node_or_null("RunnerSpawn") as Marker2D
 	if rs != null:
@@ -49,11 +56,11 @@ func _snap_to_floor(pos: Vector2) -> Vector2:
 			return Vector2(pos.x, check.y * tile_size.y - 36)
 	return pos
 
-## World positions of the authored devices: one per painted Device_tiles cluster
-## (4-neighbour connected component), placed at the cluster's centroid. Sorted so
-## the index each device gets is the same on every peer. Empty when nothing is
-## painted, in which case _build_layout uses the procedural scatter instead.
-func _authored_device_spots() -> Array:
+## The authored devices, one per painted Device_tiles cluster (4-neighbour connected
+## component): each entry is {"pos": centroid world position, "cells": member cells}.
+## Sorted by centroid so a device's index is the same on every peer. Empty when
+## nothing is painted, in which case _build_layout uses the procedural scatter.
+func _authored_device_clusters() -> Array:
 	var layer := get_node_or_null("Device_tiles") as TileMapLayer
 	if layer == null:
 		return []
@@ -64,7 +71,7 @@ func _authored_device_spots() -> Array:
 	for c in cells:
 		cell_set[c] = true
 	var seen := {}
-	var spots: Array = []
+	var clusters: Array = []
 	var neighbours := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
 	for c in cells:
 		if seen.has(c):
@@ -83,9 +90,28 @@ func _authored_device_spots() -> Array:
 		var sum := Vector2.ZERO
 		for m in members:
 			sum += layer.map_to_local(m)
-		spots.append(sum / float(members.size()))
-	spots.sort_custom(_sort_by_xy)
-	return spots
+		clusters.append({"pos": sum / float(members.size()), "cells": members})
+	clusters.sort_custom(func(a, b): return _sort_by_xy(a["pos"], b["pos"]))
+	return clusters
+
+## Erase a broken device's authored tiles so the tilemap stops drawing it — the
+## in-world "broken" tell now that the device node renders nothing itself. Runs on
+## every peer (GameManager.state_changed fires everywhere each sync), each clearing
+## its own tilemap copy once; also covers a dev-resume that loads already-broken
+## devices.
+func _on_devices_state() -> void:
+	if _device_tiles == null or _device_cells.is_empty():
+		return
+	var gm := get_tree().get_first_node_in_group("game_manager")
+	if gm == null:
+		return
+	for i in _device_cells:
+		if _device_cleared.has(i):
+			continue
+		if gm.device_done(i):
+			for cell in _device_cells[i]:
+				_device_tiles.erase_cell(cell)
+			_device_cleared[i] = true
 
 ## Deterministic 2D ordering (top-to-bottom, then left-to-right) so authored
 ## device indices match across peers regardless of get_used_cells iteration order.
@@ -210,9 +236,19 @@ func _build_layout(layout_seed: int) -> void:
 
 	# Devices: prefer the authored Device_tiles clusters (one device per painted
 	# cluster); fall back to the procedural scatter when nothing is painted, so
-	# the older levels keep working unchanged.
-	var authored := _authored_device_spots()
-	var device_spots: Array = authored if not authored.is_empty() else plan["items"]
+	# the older levels keep working unchanged. Remember each device's cells so they
+	# can be erased when it breaks.
+	_device_tiles = get_node_or_null("Device_tiles") as TileMapLayer
+	_device_cells.clear()
+	_device_cleared.clear()
+	var clusters := _authored_device_clusters()
+	var device_spots: Array = []
+	if not clusters.is_empty():
+		for i in clusters.size():
+			device_spots.append(clusters[i]["pos"])
+			_device_cells[i] = clusters[i]["cells"]
+	else:
+		device_spots = plan["items"]
 	var escape_spots: Array = plan["doors"]
 	for i in device_spots.size():
 		var device := DEVICE.instantiate()
@@ -242,6 +278,10 @@ func _build_layout(layout_seed: int) -> void:
 	if gm != null:
 		gm.devices.device_count = device_spots.size()
 		gm.setup_media(media_spots)
+		# Clear a device's tiles the moment it breaks. state_changed fires on every
+		# peer on each sync, so each peer erases its own tilemap copy — no extra rpc.
+		if not gm.state_changed.is_connected(_on_devices_state):
+			gm.state_changed.connect(_on_devices_state)
 
 func _spawn_player(id: int) -> Node:
 	var p := PLAYER.instantiate()

@@ -8,12 +8,8 @@ extends Area2D
 ## keeps the "which device is being mashed" decision on the server, where it can
 ## be checked, instead of trusting whatever index a client sends.
 ##
-## Colour comes from the replicated sabotage progress, so every peer sees the same
-## damage without the server having to push per-device rpcs.
-
-const COL_INTACT := Color(0.95, 0.3, 0.25)     # unbroken: reads as "break me"
-const COL_DAMAGED := Color(0.95, 0.7, 0.2)     # part-way through
-const COL_BROKEN := Color(0.25, 0.28, 0.32)    # done: inert scrap
+## The device body itself is drawn by the Device_tiles tilemap layer, not here —
+## this node renders nothing but a health bar and only reports Runner overlap.
 
 # Health bar: shows REMAINING integrity so both sides can judge how close a
 # device is to breaking (GDD 4.1). Full green when intact, empties to red as the
@@ -22,7 +18,6 @@ const HP_W := 44.0
 const COL_HP_FULL := Color(0.3, 0.85, 0.4)
 const COL_HP_LOW := Color(0.9, 0.25, 0.2)
 
-@onready var _fill: ColorRect = $Fill
 @onready var _hp_bg: ColorRect = $HpBg
 @onready var _hp_fill: ColorRect = $HpFill
 
@@ -57,17 +52,8 @@ func _destroyed() -> bool:
 
 func _refresh() -> void:
 	var r: float = _gm.device_ratio(index) if _gm != null else 0.0
-	if r >= 1.0:
-		_fill.color = COL_BROKEN
-	elif r > 0.0:
-		_fill.color = COL_INTACT.lerp(COL_DAMAGED, r)
-	else:
-		_fill.color = COL_INTACT
-	# A broken device stays put as scrap rather than vanishing: it is a landmark,
-	# and both sides should be able to read the score from across the room.
-	modulate.a = 0.55 if r >= 1.0 else 1.0
-
-	# Health bar tracks remaining integrity; hidden once the device is scrap.
+	# Health bar tracks remaining integrity; hidden once the device is scrap (the
+	# tilemap keeps drawing the body — the vanished bar is the "broken" tell).
 	var remaining: float = clampf(1.0 - r, 0.0, 1.0)
 	var alive: bool = r < 1.0
 	_hp_bg.visible = alive
