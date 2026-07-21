@@ -7,33 +7,28 @@ class_name KnockSystem
 ## time rather than winning (GDD 4.6). Three knocks stun it; every knock opens an
 ## invulnerability window and kicks it away from whatever it was breaking.
 ##
-## The three knobs that decide whether a lone Hunter can hold the Runner (GDD 7):
+## Knocks BANK: the count never bleeds off on its own. Once a knock lands it stays
+## on the Runner until the third one stuns and resets the tally — time passing does
+## nothing to it. So the two knobs that decide whether Hunters can hold the Runner
+## (GDD 7) are:
 ##   * IFRAME_TIME  — the gap nobody can knock through. Note it is global to the
 ##     Runner, not per-Hunter: a second Hunter cannot knock inside it either, so
 ##     piling on more Hunters does not stun any faster. What extra Hunters buy is
 ##     coverage — more angles the Runner has to break away from.
-##   * KNOCK_DECAY  — knocks are not banked. Without decay one Hunter could chip
-##     away across a whole match and still land a stun, which is exactly the
-##     "单人拖不住" rule the design wants to hold.
 ##   * STUN_TIME    — how much of the Runner's clock a full stun burns.
-##
-## Deliberately NOT a ratchet: the old grapple saved capture progress at
-## checkpoints. Decay replaces that — progress is meant to be lost.
 
 const KNOCKS_TO_STUN := 3
 const IFRAME_TIME := 1.20        # invulnerable after getting up from a stun
-const KNOCK_DECAY := 4.0         # no new knock for this long -> the count resets
 const STUN_TIME := 2.50          # how long a stunned Runner is frozen
 const KNOCK_RANGE := 64.0        # how close a Hunter must be to knock (~2 tiles)
 const KNOCKBACK_VX := 480.0      # horizontal kick, aimed along the knocker's facing
 
 var knocks := 0                  # 0..KNOCKS_TO_STUN-1 (a full count stuns and resets)
 var iframe_left := 0.0
-var decay_left := 0.0
 var stun_left := 0.0
 
 ## Advance the timers. Returns true only when a DISCRETE change landed that the
-## clients need told about promptly — a window closing or the count going cold.
+## clients need told about promptly — a window closing or a stun ending.
 ##
 ## Deliberately not "true whenever a timer moved": the clients read these as
 ## booleans (stunned / invulnerable) and a count, so syncing a decrementing float
@@ -49,11 +44,6 @@ func tick(delta: float) -> bool:
 		stun_left = maxf(0.0, stun_left - delta)
 		if stun_left <= 0.0:
 			iframe_left = IFRAME_TIME
-			changed = true
-	if decay_left > 0.0:
-		decay_left = maxf(0.0, decay_left - delta)
-		if decay_left <= 0.0 and knocks > 0:
-			knocks = 0           # went cold: the Hunters have to start over
 			changed = true
 	return changed
 
@@ -79,10 +69,8 @@ func can_knock() -> bool:
 ## Land one knock. Returns true when this was the third (the Runner is stunned).
 func add_knock() -> bool:
 	knocks += 1
-	decay_left = KNOCK_DECAY
 	if knocks >= KNOCKS_TO_STUN:
 		knocks = 0
-		decay_left = 0.0
 		stun_left = STUN_TIME
 		return true
 	return false
@@ -91,5 +79,4 @@ func add_knock() -> bool:
 func force_end() -> void:
 	knocks = 0
 	iframe_left = 0.0
-	decay_left = 0.0
 	stun_left = 0.0
