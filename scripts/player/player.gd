@@ -76,6 +76,9 @@ func _ready() -> void:
 	_apply_sync_rate()
 	Net.transport_changed.connect(_apply_sync_rate)
 	gm = get_tree().get_first_node_in_group("game_manager")
+	# Break-time force field visual (GDD 4.1). Added in code (no scene wiring); it
+	# self-gates to the Runner and reads the replicated shield state off the gm.
+	add_child(preload("res://scripts/player/shield_visual.gd").new())
 
 ## Replication rate by transport. The default (interval 0) sends every physics
 ## tick, which floods the relay and queues packets. LAN / P2P links can afford

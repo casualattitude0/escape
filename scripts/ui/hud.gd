@@ -86,7 +86,8 @@ func _process(_delta: float) -> void:
 	if _my_combat != null:
 		var mode_name := "BREAK" if _my_combat.mode == PlayerCombat.Mode.BREAK else "ATTACK"
 		var carry := "carrying media" if _gm.runner_carrying() else "empty-handed"
-		role_label.text = "You are: Runner (escape)  [%s · %s]" % [mode_name, carry]
+		var sh := "  · SHIELDED" if _gm.shield_up() else ""
+		role_label.text = "You are: Runner (escape)  [%s · %s]%s" % [mode_name, carry, sh]
 	_update_lockdown()
 
 func _update_interact_prompt() -> void:

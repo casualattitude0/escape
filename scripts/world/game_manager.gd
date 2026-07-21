@@ -46,6 +46,13 @@ var tunnels := TunnelSystem.new()
 # The Hunter's vertical fast-travel (tile-authored shafts). Elevator-like ride,
 # runs through the shared ElevatorSystem ride lifecycle.
 var shafts := ShaftSystem.new()
+# The Runner's break-time force field (GDD 4.1). Absorbs Hunter knocks while the
+# Runner mashes a device; server-authoritative, ticked in _physics_process.
+var shield := ShieldSystem.new()
+# Per-Hunter rate limit on shield hits (peer id -> seconds left). Keeps a lone
+# Hunter's shield-break slow enough that it can never accumulate a stun, while
+# several Hunters still break it in parallel (see shield_system.gd).
+var _shield_hit_cd := {}
 
 # Tint the special-travel tile layers so players read them apart from plain
 # terrain at a glance (the tileset is white-on-black, so a tint colours it).
@@ -113,6 +120,7 @@ func _ready() -> void:
 	shafts.setup(shaft_layer, _terrain)
 	if shaft_layer != null:
 		shaft_layer.modulate = SHAFT_TINT
+	add_child(shield)
 	set_physics_process(multiplayer.is_server())
 
 # ---- read facade (HUD / players / devices / escape) ------------------------
@@ -140,6 +148,13 @@ func devices_destroyed() -> int:
 
 func escape_open() -> bool:
 	return devices.all_destroyed()
+
+## Runner's break-time force field (GDD 4.1) — read by the shield visual / HUD.
+func shield_up() -> bool:
+	return shield.up
+
+func shield_ratio() -> float:
+	return shield.ratio()
 
 # ---- media facade (players / media items) ---------------------------------
 
@@ -513,6 +528,16 @@ func hunter_press(render_host_time: int = 0) -> void:
 			runner_pos = past["pos"]
 	if not _in_range(h, runner_pos):
 		return
+	# Shield up (GDD 4.1): the knock hits the force field, not the Runner — no
+	# knockback, no stun accumulation. Per-Hunter rate limited so a lone Hunter
+	# breaks it slowly (its shield-up phase outlasts the knock decay, so it can
+	# never accumulate a stun) while several Hunters break it fast.
+	if shield.is_up():
+		if float(_shield_hit_cd.get(id, 0.0)) <= 0.0:
+			_shield_hit_cd[id] = ShieldSystem.SHIELD_HIT_CD
+			shield.hit()
+			_broadcast(true)
+		return
 	if not knock.can_knock():
 		return          # inside an iframe, or already stunned
 	_knock_back(h, runner)
@@ -625,9 +650,19 @@ func _physics_process(delta: float) -> void:
 		return
 	if _attack_cd_left > 0.0:
 		_attack_cd_left -= delta
-	if devices.active_index >= 0 and _device_at_runner() < 0:
+	var at_device := _device_at_runner()
+	if devices.active_index >= 0 and at_device < 0:
 		devices.active_index = -1
 		_broadcast(false)
+	# Break-time force field (GDD 4.1): up while the Runner is parked at a device
+	# with a medium; only Hunter knocks bring it down (shield_system.gd).
+	var breaking := carried_index >= 0 and at_device >= 0
+	if shield.tick(breaking, delta):
+		_broadcast(false)
+	for pid in _shield_hit_cd.keys():
+		_shield_hit_cd[pid] = float(_shield_hit_cd[pid]) - delta
+		if _shield_hit_cd[pid] <= 0.0:
+			_shield_hit_cd.erase(pid)
 	if knock.tick(delta):
 		_broadcast(false)
 	if zones.tick(delta):
@@ -670,6 +705,7 @@ func _set_winner(w: String) -> void:
 	devices.force_end()
 	zones.force_end()
 	elevators.force_end()
+	shield.force_end()
 	_broadcast(true)
 	# The round is over — drop any dev snapshot so the next launch starts fresh.
 	if DevSnapshot.enabled():
@@ -681,7 +717,7 @@ func _set_winner(w: String) -> void:
 ## a snapshot from the old grapple/key build has `installs` and no device
 ## progress, so restoring it would silently produce a nonsense round (every device
 ## intact, but the state it was saved with long gone) rather than fail loudly.
-const SNAPSHOT_VERSION := 5
+const SNAPSHOT_VERSION := 7
 
 func snapshot_state() -> Dictionary:
 	return {
@@ -691,7 +727,6 @@ func snapshot_state() -> Dictionary:
 		"time": time_left,
 		"winner": winner,
 		"knocks": knock.knocks,
-		"decay": knock.decay_left,
 		"iframe": knock.iframe_left,
 		"stun": knock.stun_left,
 		"zones": zones.snapshot(),
@@ -699,6 +734,9 @@ func snapshot_state() -> Dictionary:
 		"carried": carried_index,
 		"mpos": _media_pos.duplicate(),
 		"mcons": _media_consumed.duplicate(),
+		"shup": shield.up,
+		"shhp": shield.hp,
+		"shcd": shield.cooldown,
 	}
 
 func restore_state(d: Dictionary) -> void:
@@ -709,7 +747,6 @@ func restore_state(d: Dictionary) -> void:
 	time_left = float(d.get("time", MATCH_TIME))
 	winner = str(d.get("winner", ""))
 	knock.knocks = int(d.get("knocks", 0))
-	knock.decay_left = float(d.get("decay", 0.0))
 	knock.iframe_left = float(d.get("iframe", 0.0))
 	knock.stun_left = float(d.get("stun", 0.0))
 	zones.restore(d.get("zones", {}))
@@ -717,6 +754,9 @@ func restore_state(d: Dictionary) -> void:
 	carried_index = int(d.get("carried", -1))
 	_media_pos = (d.get("mpos", {}) as Dictionary).duplicate()
 	_media_consumed = (d.get("mcons", {}) as Dictionary).duplicate()
+	shield.up = bool(d.get("shup", false))
+	shield.hp = int(d.get("shhp", 0))
+	shield.cooldown = float(d.get("shcd", 0.0))
 	_broadcast(true)   # push the restored state to every peer's HUD
 
 func _state_dict() -> Dictionary:
@@ -736,6 +776,8 @@ func _state_dict() -> Dictionary:
 		"carried": carried_index,
 		"mpos": _media_pos,
 		"mcons": _media_consumed,
+		"shup": shield.up,
+		"shhp": shield.hp,
 	}
 
 func _apply_state(d: Dictionary) -> void:
@@ -755,6 +797,8 @@ func _apply_state(d: Dictionary) -> void:
 	carried_index = int(d.get("carried", -1))
 	_media_pos = (d.get("mpos", {}) as Dictionary).duplicate()
 	_media_consumed = (d.get("mcons", {}) as Dictionary).duplicate()
+	shield.up = bool(d.get("shup", false))
+	shield.hp = int(d.get("shhp", 0))
 	state_changed.emit()
 
 func _broadcast(reliable: bool) -> void:
