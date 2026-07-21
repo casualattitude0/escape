@@ -9,6 +9,8 @@ extends CharacterBody2D
 ## and kill. Hunter (the researcher) walks only and knocks the Runner to stun it.
 
 const PIPE_PEEK_CAM := 120.0  # how far the camera leans outside the current pipe end (peek)
+const POP_OUT_SPEED := 200.0  # outward burst when popping out of a tunnel
+const POP_UP_SPEED := -260.0  # upward hop on pop -> drives the jump squash + dust on every peer
 const STUN_DRAG := 900.0     # how fast a stunned Runner's knockback slide bleeds off
 const KNOCK_HOP := -90.0     # small pop on a knock so the kick reads as a hit, not a nudge
 const KNOCK_STAGGER := 0.38  # Runner: no steering right after a knock, so the shove lands
@@ -130,8 +132,11 @@ func _physics_process(delta: float) -> void:
 			elif Input.is_action_just_pressed("move_left"):
 				tap = -1.0
 		if tap != 0.0 and tap == out_dir:
-			# Push outward from this end -> emerge out of the pipe into the world.
+			# Push outward from this end -> pop out of the pipe: a burst up-and-out
+			# so the Runner is visibly ejected. The upward hop makes the animator
+			# enter JUMP, which drives the jump squash + dust puff on every peer.
 			global_position = mouth
+			velocity = Vector2(out_dir * POP_OUT_SPEED, POP_UP_SPEED)
 			net_pos = mouth
 			tunneling = false
 			camera.offset = Vector2.ZERO
