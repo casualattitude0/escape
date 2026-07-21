@@ -18,6 +18,7 @@ var _gm: Node
 var _my_role := Roles.HUNTER
 var _my_combat: PlayerCombat
 var _my_player: Node2D
+var _interact_prompt: Label   # contextual "press key" hint at a tunnel/elevator/shaft
 
 func _ready() -> void:
 	_my_role = Net.players.get(multiplayer.get_unique_id(), Roles.HUNTER)
@@ -41,11 +42,44 @@ func _ready() -> void:
 			if c.is_multiplayer_authority():
 				_my_player = c
 				break
+	_build_interact_prompt()
 	_refresh()
+
+## A "press key" hint that floats over the tunnel/elevator/shaft the local player
+## is beside. Built in code (no scene node) on its own front-most CanvasLayer,
+## independent of this hidden HUD.
+func _build_interact_prompt() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 128   # front-most: draws over the world and every other layer
+	_interact_prompt = Label.new()
+	_interact_prompt.add_theme_font_size_override("font_size", 22)
+	_interact_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_interact_prompt.add_theme_color_override("font_color", Color(1.0, 0.95, 0.4))
+	_interact_prompt.add_theme_color_override("font_outline_color", Color(0, 0, 0))
+	_interact_prompt.add_theme_constant_override("outline_size", 6)   # readable over any tile
+	_interact_prompt.visible = false
+	layer.add_child(_interact_prompt)
+	# The World is mid-_ready when this HUD builds, so attach the layer deferred.
+	var host: Node = get_parent()
+	if host == null:
+		host = self
+	host.add_child.call_deferred(layer)
+
+## Players spawn AFTER this HUD's _ready (via the MultiplayerSpawner), so the
+## local body must be found lazily rather than once at startup.
+func _resolve_my_player() -> void:
+	if _gm == null:
+		return
+	var me: Node = _gm.players().get_node_or_null(str(multiplayer.get_unique_id()))
+	if me != null:
+		_my_player = me as Node2D
+		if _my_role == Roles.RUNNER:
+			_my_combat = me.combat
 
 func _process(_delta: float) -> void:
 	if _gm == null:
 		return
+	_update_interact_prompt()
 	var s: int = _gm.time_seconds()
 	timer_label.text = "%d:%02d" % [s / 60, s % 60]
 	timer_label.modulate = Color(1, 0, 0)
@@ -53,6 +87,43 @@ func _process(_delta: float) -> void:
 		var mode_name := "BREAK" if _my_combat.mode == PlayerCombat.Mode.BREAK else "ATTACK"
 		role_label.text = "You are: Runner (escape)  [%s]" % mode_name
 	_update_lockdown()
+
+func _update_interact_prompt() -> void:
+	if _interact_prompt == null:
+		return
+	if _my_player == null:
+		_resolve_my_player()
+	var key := ""
+	var anchor := Vector2.ZERO   # world position of the tile the hint sits on
+	# Hide while dead, mid-ride/tunnel, or after the match ends.
+	if _my_player != null and _gm.winner == "" \
+			and not _my_player.get("dead") and not _my_player.get("riding") \
+			and not _my_player.get("tunneling"):
+		var pos: Vector2 = _my_player.global_position
+		if _my_role == Roles.RUNNER:
+			var t = _gm.tunnel_enter_at(pos)
+			if t != null:
+				key = "Shift"
+				anchor = t["tile"]
+		else:
+			var ep = _gm.elevator_pos(_my_player)
+			if ep != null:
+				key = "E"
+				anchor = ep
+			else:
+				var sp = _gm.shaft_hint_pos(pos)
+				if sp != null:
+					key = "Shift"
+					anchor = sp
+	if key == "":
+		_interact_prompt.visible = false
+		return
+	# Sit the hint on the device tile, projected from world to screen space.
+	var screen: Vector2 = get_viewport().get_canvas_transform() * anchor
+	_interact_prompt.text = "[ %s ]" % key
+	_interact_prompt.reset_size()
+	_interact_prompt.position = screen - _interact_prompt.size * 0.5
+	_interact_prompt.visible = true
 
 func _refresh() -> void:
 	if _gm == null:

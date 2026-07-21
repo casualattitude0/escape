@@ -37,6 +37,12 @@ func try_ride(hunter: Node2D) -> bool:
 			return true
 	return false
 
+## Start a timed ride to an explicit destination, bypassing the elevator-area
+## check. Used by other vertical travel that shares this ride lifecycle (the
+## Hunter shaft): tick() ends it and issues ride_end exactly like an elevator.
+func begin_ride(pid: int, start_pos: Vector2, dest: Vector2) -> void:
+	_riding[pid] = {"end_pos": dest, "time_left": RIDE_TIME, "start_pos": start_pos}
+
 ## Tick all active rides. Returns an array of {pid, end_pos} for rides that finished.
 func tick(delta: float) -> Array:
 	var finished: Array = []

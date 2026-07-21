@@ -43,6 +43,15 @@ var time_left := MATCH_TIME
 # The Runner's horizontal fast-travel. Built in code (no scene node) so levels
 # only need the "Tunnel" TileMapLayer, nothing wired per-instance.
 var tunnels := TunnelSystem.new()
+# The Hunter's vertical fast-travel (tile-authored shafts). Elevator-like ride,
+# runs through the shared ElevatorSystem ride lifecycle.
+var shafts := ShaftSystem.new()
+
+# Tint the special-travel tile layers so players read them apart from plain
+# terrain at a glance (the tileset is white-on-black, so a tint colours it).
+# Warm = Runner tunnels (horizontal); cool = Hunter shafts/elevator (vertical).
+const TUNNEL_TINT := Color(1.0, 0.6, 0.2)
+const SHAFT_TINT := Color(0.3, 0.7, 1.0)
 @onready var _players: Node = get_node("../Players")
 @onready var _devices_root: Node = get_node("../Devices")
 @onready var _escape_root: Node = get_node("../Escape")
@@ -64,11 +73,31 @@ var _last_sound_slice := {}      # device index -> last progress slice that made
 # the server so a client cannot shorten it. There is only ever one Runner.
 var _attack_cd_left := 0.0
 
+## The vertical-travel tile layer, tolerant of common names so an accidental
+## rename in the editor doesn't silently disable shafts. Returns null if none.
+func _find_shaft_layer() -> TileMapLayer:
+	for n in ["Shaft", "Elevator_tiles", "Elevator_Tile", "Elevator"]:
+		var layer := get_node_or_null("../" + n) as TileMapLayer
+		if layer != null:
+			return layer
+	return null
+
 func _ready() -> void:
 	add_to_group("game_manager")
 	elevators.setup(_elevators_root, _players)
 	add_child(tunnels)
-	tunnels.setup(get_node_or_null("../Tunnel") as TileMapLayer, _terrain)
+	var tunnel_layer := get_node_or_null("../Tunnel") as TileMapLayer
+	tunnels.setup(tunnel_layer, _terrain)
+	if tunnel_layer != null:
+		tunnel_layer.modulate = TUNNEL_TINT
+	add_child(shafts)
+	# The Hunter shaft / elevator tile layer, found by any of its accepted names
+	# so an editor rename (Elevator_tiles / Elevator_Tile / Shaft) doesn't
+	# silently break shafts. Painting a vertical tile run there makes a shaft.
+	var shaft_layer := _find_shaft_layer()
+	shafts.setup(shaft_layer, _terrain)
+	if shaft_layer != null:
+		shaft_layer.modulate = SHAFT_TINT
 	set_physics_process(multiplayer.is_server())
 
 # ---- read facade (HUD / players / devices / escape) ------------------------
@@ -195,6 +224,41 @@ func elevator_press() -> void:
 func is_riding(peer_id: int) -> bool:
 	return elevators.is_riding(peer_id)
 
+## Read facade: if this body is in an elevator, the nearest stop position (for
+## the on-tile ride prompt); else null. Client-safe — the elevator Area2D tracks
+## overlap on every peer.
+func elevator_pos(body: Node2D):
+	if _elevators_root == null:
+		return null
+	for e in _elevators_root.get_children():
+		if e.has_method("hunter_in_range") and e.hunter_in_range(body):
+			if e.has_method("near_stop"):
+				return e.near_stop(body.global_position)
+			return e.global_position
+	return null
+
+# ---- shafts (Hunter vertical fast-travel) ---------------------------------
+
+## A Hunter requests a shaft ride. Server validates they're at a shaft mouth,
+## then rides them to the far end via the shared ride lifecycle (like the
+## elevator: locked for the ride, no dwelling inside). Noisy, like the elevator.
+@rpc("any_peer", "call_local", "reliable")
+func shaft_press() -> void:
+	if not multiplayer.is_server() or winner != "":
+		return
+	var id := _sender_id()
+	var h: Node2D = _players.get_node_or_null(str(id))
+	if h == null or h.dead or h.get("role") != Roles.HUNTER:
+		return
+	if h.stunned or h.get("riding") or elevators.is_riding(id):
+		return
+	var dest = shafts.mouth_at(h.global_position)
+	if dest == null:
+		return
+	elevators.begin_ride(id, h.global_position, dest)
+	h.ride_start.rpc_id(id, h.global_position, dest)
+	emit_sound(h.global_position)
+
 # ---- tunnels (Runner horizontal fast-travel) ------------------------------
 
 ## If a Runner at `pos` is standing at a tunnel mouth, the entry/far mouths to
@@ -202,6 +266,11 @@ func is_riding(peer_id: int) -> bool:
 ## directly (no rpc) — see player._physics_process.
 func tunnel_enter_at(pos: Vector2):
 	return tunnels.enter_at(pos)
+
+## Read facade: if a Hunter at pos is at a shaft mouth, the nearest shaft tile
+## center (for the on-tile ride prompt); else null.
+func shaft_hint_pos(pos: Vector2):
+	return shafts.hint_pos(pos)
 
 # ---- sabotage (GDD 4.1) ---------------------------------------------------
 

@@ -13,10 +13,9 @@ class_name TunnelSystem
 ## warps to the other. (The Runner's slide-through low ceilings are a separate
 ## thing entirely: those are ordinary terrain collision, not this layer.)
 
-const ENTER_X_TILES := 0.6   # horizontal reach into a mouth cell (tile widths)
-const ENTER_Y_TILES := 1.0   # vertical tolerance at a mouth (tile heights)
+const ENTER_X_TILES := 0.7   # horizontal reach into a mouth cell — must be beside the opening
+const ENTER_Y_TILES := 0.7   # vertical reach — tight, so only right beside the tunnel (even mid-air)
 const FOOT_OFFSET := 36.0    # player origin sits this far above its feet (see player.tscn)
-const FLOOR_SCAN := 12       # cells searched downward for the floor under a mouth
 
 var _layer: TileMapLayer
 var _terrain: TileMapLayer
@@ -64,19 +63,19 @@ func _add_run(x0: int, x1: int, y: int) -> void:
 		# the Runner sits while inside. They only move out to the mouth to emerge.
 		"a_in": Vector2(a.x + fwd * _tile.x, a.y),
 		"b_in": Vector2(b.x - fwd * _tile.x, b.y),
+		# Centers of the end tiles themselves, for placing the on-tile hint.
+		"a_tile": _layer.map_to_local(Vector2i(x0, y)),
+		"b_tile": _layer.map_to_local(Vector2i(x1, y)),
 	})
 
-## Where the Runner lands at a mouth cell: the cell center in x, dropped so its
-## feet rest on the nearest floor below (same rule as world._snap_to_floor).
+## Where the Runner sits at a mouth: the opening cell, with feet at the cell's
+## floor line. Deliberately NO downward floor scan — a tunnel mouth is at the
+## tunnel's OWN height, which may be mid-air; the Runner enters, peeks, and
+## emerges there (in the air if that's where the opening is), never snapped down
+## to the closest ground below.
 func _mouth_pos(cell: Vector2i) -> Vector2:
 	var center := _layer.map_to_local(cell)
-	if _terrain != null:
-		var t := _terrain.local_to_map(center)
-		for dy in FLOOR_SCAN:
-			var below := Vector2i(t.x, t.y + dy)
-			if _terrain.get_cell_source_id(below) != -1:
-				return Vector2(center.x, below.y * _tile.y - FOOT_OFFSET)
-	return center
+	return Vector2(center.x, center.y + _tile.y * 0.5 - FOOT_OFFSET)
 
 ## If pos sits at a tunnel mouth, return the mouths and the inside peek-spots for
 ## both the near end (entry/entry_in) and the opposite one (far/far_in), so the
@@ -88,7 +87,7 @@ func enter_at(pos: Vector2):
 		var a: Vector2 = t["a"]
 		var b: Vector2 = t["b"]
 		if absf(pos.x - a.x) <= rx and absf(pos.y - a.y) <= ry:
-			return {"entry": a, "far": b, "entry_in": t["a_in"], "far_in": t["b_in"]}
+			return {"entry": a, "far": b, "entry_in": t["a_in"], "far_in": t["b_in"], "tile": t["a_tile"]}
 		if absf(pos.x - b.x) <= rx and absf(pos.y - b.y) <= ry:
-			return {"entry": b, "far": a, "entry_in": t["b_in"], "far_in": t["a_in"]}
+			return {"entry": b, "far": a, "entry_in": t["b_in"], "far_in": t["a_in"], "tile": t["b_tile"]}
 	return null

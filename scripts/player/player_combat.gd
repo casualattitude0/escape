@@ -149,6 +149,11 @@ func _hunter_input(gm: Node) -> void:
 	if Input.is_action_just_pressed("elevator"):
 		gm.elevator_press.rpc_id(1)
 		return
+	# Shift at a vertical shaft mouth rides to the other end (Hunter-only; the
+	# server validates position). Slide is otherwise unused by the Hunter.
+	if Input.is_action_just_pressed("slide"):
+		gm.shaft_press.rpc_id(1)
+		return
 	if _stiff_left > 0.0:
 		return
 	if not Input.is_action_just_pressed("attack"):
