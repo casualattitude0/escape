@@ -14,3 +14,6 @@ __pycache__/
 
 # Go build output
 /relay-server/relay-server
+
+# graphify knowledge-graph output (generated)
+/graphify-out/
