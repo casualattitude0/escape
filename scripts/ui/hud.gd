@@ -30,7 +30,7 @@ func _ready() -> void:
 	lockdown_label.visible = false
 	lockdown_bar.visible = false
 	if _my_role == Roles.RUNNER:
-		hint_label.text = "A/D move · Space jump · Shift slide · F attack (near device: break)"
+		hint_label.text = "A/D move · Space jump · Shift slide · F: grab media / break device / kill (empty-handed)"
 		for c in get_tree().get_first_node_in_group("game_manager").players().get_children():
 			if c.is_multiplayer_authority():
 				_my_combat = c.combat
@@ -85,7 +85,8 @@ func _process(_delta: float) -> void:
 	timer_label.modulate = Color(1, 0, 0)
 	if _my_combat != null:
 		var mode_name := "BREAK" if _my_combat.mode == PlayerCombat.Mode.BREAK else "ATTACK"
-		role_label.text = "You are: Runner (escape)  [%s]" % mode_name
+		var carry := "carrying media" if _gm.runner_carrying() else "empty-handed"
+		role_label.text = "You are: Runner (escape)  [%s · %s]" % [mode_name, carry]
 	_update_lockdown()
 
 func _update_interact_prompt() -> void:

@@ -6,6 +6,7 @@ extends Node2D
 const PLAYER := preload("res://scenes/actors/player.tscn")
 const DEVICE := preload("res://scenes/actors/device.tscn")
 const ESCAPE := preload("res://scenes/actors/escape_point.tscn")
+const MEDIA := preload("res://scenes/actors/media_item.tscn")
 
 var RUNNER_SPAWN := Vector2.ZERO
 var HUNTER_SPAWNS: Array[Vector2] = []
@@ -18,6 +19,7 @@ const ESCAPE_COUNT := 1
 @onready var players_root: Node = $Players
 @onready var devices_root: Node2D = $Devices
 @onready var escape_root: Node2D = $Escape
+@onready var media_root: Node = get_node_or_null("Media")
 @onready var terrain: TileMapLayer = $Terrain
 
 # ids that have confirmed their world scene is ready (server-side only)
@@ -46,6 +48,64 @@ func _snap_to_floor(pos: Vector2) -> Vector2:
 		if terrain.get_cell_source_id(check) != -1:
 			return Vector2(pos.x, check.y * tile_size.y - 36)
 	return pos
+
+## World positions of the authored devices: one per painted Device_tiles cluster
+## (4-neighbour connected component), placed at the cluster's centroid. Sorted so
+## the index each device gets is the same on every peer. Empty when nothing is
+## painted, in which case _build_layout uses the procedural scatter instead.
+func _authored_device_spots() -> Array:
+	var layer := get_node_or_null("Device_tiles") as TileMapLayer
+	if layer == null:
+		return []
+	var cells := layer.get_used_cells()
+	if cells.is_empty():
+		return []
+	var cell_set := {}
+	for c in cells:
+		cell_set[c] = true
+	var seen := {}
+	var spots: Array = []
+	var neighbours := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for c in cells:
+		if seen.has(c):
+			continue
+		var stack: Array = [c]
+		var members: Array = []
+		seen[c] = true
+		while not stack.is_empty():
+			var cur: Vector2i = stack.pop_back()
+			members.append(cur)
+			for d in neighbours:
+				var nb: Vector2i = cur + d
+				if cell_set.has(nb) and not seen.has(nb):
+					seen[nb] = true
+					stack.append(nb)
+		var sum := Vector2.ZERO
+		for m in members:
+			sum += layer.map_to_local(m)
+		spots.append(sum / float(members.size()))
+	spots.sort_custom(_sort_by_xy)
+	return spots
+
+## Deterministic 2D ordering (top-to-bottom, then left-to-right) so authored
+## device indices match across peers regardless of get_used_cells iteration order.
+func _sort_by_xy(a: Vector2, b: Vector2) -> bool:
+	if a.y != b.y:
+		return a.y < b.y
+	return a.x < b.x
+
+## World positions of the media spawns, one per Marker2D under MediaSpawns. Snapped
+## to the floor so a roughly-dragged placeholder still rests on ground (the designer
+## tunes X; Y is forgiving). Empty when the container/markers are absent.
+func _read_media_spawns() -> Array:
+	var spots: Array = []
+	var root := get_node_or_null("MediaSpawns")
+	if root == null:
+		return spots
+	for m in root.get_children():
+		if m is Marker2D:
+			spots.append(_snap_to_floor(m.global_position))
+	return spots
 
 func _ready() -> void:
 	_read_spawns()
@@ -148,7 +208,11 @@ func _build_layout(layout_seed: int) -> void:
 	var layout := LevelLayout.new(terrain)
 	var plan := layout.generate(DeviceSystem.DEVICE_COUNT, ESCAPE_COUNT, rng, RUNNER_SPAWN)
 
-	var device_spots: Array = plan["items"]
+	# Devices: prefer the authored Device_tiles clusters (one device per painted
+	# cluster); fall back to the procedural scatter when nothing is painted, so
+	# the older levels keep working unchanged.
+	var authored := _authored_device_spots()
+	var device_spots: Array = authored if not authored.is_empty() else plan["items"]
 	var escape_spots: Array = plan["doors"]
 	for i in device_spots.size():
 		var device := DEVICE.instantiate()
@@ -162,6 +226,22 @@ func _build_layout(layout_seed: int) -> void:
 		exit_point.index = i
 		exit_point.position = escape_spots[i]
 		escape_root.add_child(exit_point)
+
+	# Media (破壞媒材): one item per authored MediaSpawns marker.
+	var media_spots := _read_media_spawns()
+	if media_root != null:
+		for i in media_spots.size():
+			var item := MEDIA.instantiate()
+			item.name = "Media%d" % i
+			item.index = i
+			item.position = media_spots[i]
+			media_root.add_child(item)
+
+	# Tell the match state the real (authored, peer-identical) counts.
+	var gm := get_tree().get_first_node_in_group("game_manager")
+	if gm != null:
+		gm.devices.device_count = device_spots.size()
+		gm.setup_media(media_spots)
 
 func _spawn_player(id: int) -> Node:
 	var p := PLAYER.instantiate()

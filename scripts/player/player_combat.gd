@@ -33,7 +33,7 @@ enum Mode { ATTACK, BREAK }
 @onready var body: CharacterBody2D = get_parent()
 
 var _runner_ref: Node
-var _stiff_left: float = 0.0      # committed to a swing / its miss recovery, immobile
+var _stiff_left: float = 0.0      # Hunter: swing/miss recovery — gates re-swings, not movement
 var _stagger_left: float = 0.0    # Runner: knocked, riding the shove, no steering
 var _attack_cd_left: float = 0.0  # Runner: local mirror of the server's cooldown
 var mode: int = Mode.ATTACK       # Runner: default attack; F near device enters break
@@ -71,9 +71,11 @@ func handle_input(_delta: float) -> void:
 	else:
 		_runner_input(gm)
 
-## Runner F key: context-sensitive. Near a device → enter break mode and start
-## sabotaging. Already in break mode → keep mashing. Any move key exits break
-## mode. Away from devices in attack mode → kill swing at Hunters.
+## Runner F key: context-sensitive on whether it is carrying a 破壞媒材 (GDD 4.1).
+## Empty-handed: F grabs a medium if standing on one, otherwise swings a kill.
+## Carrying: F at a device enters/continues break mode (mashing); it CANNOT kill
+## while carrying (GDD 4.6). Any move key exits break mode. All of these are
+## re-checked on the server; the client's own tests only skip pointless rpcs.
 func _runner_input(gm: Node) -> void:
 	if mode == Mode.BREAK:
 		var dir := Input.get_axis("move_left", "move_right")
@@ -82,6 +84,10 @@ func _runner_input(gm: Node) -> void:
 			return
 		if not Input.is_action_just_pressed("attack"):
 			return
+		# The medium is gone (spent on the break, or dropped): nothing to mash.
+		if not gm.runner_carrying():
+			mode = Mode.ATTACK
+			return
 		if not _device_in_range(gm):
 			mode = Mode.ATTACK
 			return
@@ -89,20 +95,27 @@ func _runner_input(gm: Node) -> void:
 			return
 		body.animator.sabotage()
 		gm.sabotage_press.rpc_id(1)
-	else:
-		if not Input.is_action_just_pressed("attack"):
-			return
+		return
+
+	if not Input.is_action_just_pressed("attack"):
+		return
+	if gm.runner_carrying():
+		# Hands full: break the device it is standing at; no kill (GDD 4.6).
 		if _device_in_range(gm) and not _zone_locked(gm):
 			mode = Mode.BREAK
 			body.animator.sabotage()
 			gm.sabotage_press.rpc_id(1)
-		else:
-			if _attack_cd_left > 0.0:
-				return
-			body.animator.attack()
-			_attack_cd_left = ATTACK_CD
-			if _find_target_hunter(gm) != null:
-				gm.attack_press.rpc_id(1)
+		return
+	# Empty-handed: grab a medium if one is here, else swing a kill.
+	if _media_in_range(gm):
+		gm.pickup_press.rpc_id(1)
+		return
+	if _attack_cd_left > 0.0:
+		return
+	body.animator.attack()
+	_attack_cd_left = ATTACK_CD
+	if _find_target_hunter(gm) != null:
+		gm.attack_press.rpc_id(1)
 
 ## Client-side lockdown check. The server re-checks authoritatively.
 func _zone_locked(gm: Node) -> bool:
@@ -115,6 +128,20 @@ func _device_in_range(gm: Node) -> bool:
 		if gm.device_done(d.index):
 			continue
 		if body.global_position.distance_to(d.global_position) <= DeviceSystem.DEVICE_RANGE:
+			return true
+	return false
+
+## Is an available medium close enough to grab? Prediction only — the server
+## re-derives it from real overlap. Reads the medium's authoritative resting spot
+## rather than the node's rendered position, so it doesn't race the item's render.
+func _media_in_range(gm: Node) -> bool:
+	var root: Node = gm.media_root()
+	if root == null:
+		return false
+	for m in root.get_children():
+		if not gm.media_available(int(m.index)):
+			continue
+		if body.global_position.distance_to(gm.media_pos(int(m.index))) <= MediaItem.PICKUP_RANGE:
 			return true
 	return false
 

@@ -180,6 +180,11 @@ func _physics_process(delta: float) -> void:
 			and not combat.stiff_active() and not movement.exit_stun_active():
 		var t = gm.tunnel_enter_at(global_position)
 		if t != null:
+			# A medium can't ride the pipe (GDD 4.5): it drops at the near mouth,
+			# where the Runner can circle back for it — lighter than a stun's
+			# return-home. gm is server-side here (the Runner is the host).
+			if gm.runner_carrying():
+				gm.drop_media_at(t["entry"])
 			_tunnel_a = t["entry"]
 			_tunnel_b = t["far"]
 			_tunnel_a_in = t["entry_in"]
@@ -205,7 +210,12 @@ func _physics_process(delta: float) -> void:
 		animator.publish(delta)
 		return
 
-	var immobile := combat.stiff_active() or movement.exit_stun_active()
+	# The Hunter keeps its footing through a knock swing: the stiff is only a
+	# re-swing cadence lockout (player_combat._hunter_input) and the KNOCK pose
+	# trigger (player_animator), not a movement freeze. Tunnel exit-stun still
+	# roots the Runner. Since _stiff_left is Hunter-only, dropping it here leaves
+	# the Runner's locks untouched.
+	var immobile := movement.exit_stun_active()
 
 	movement.tick(delta, not immobile)
 	effects.camera_juice(delta)   # lookahead + landing shake: real velocity, owner only

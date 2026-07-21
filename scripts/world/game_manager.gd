@@ -55,6 +55,7 @@ const SHAFT_TINT := Color(0.3, 0.7, 1.0)
 @onready var _players: Node = get_node("../Players")
 @onready var _devices_root: Node = get_node("../Devices")
 @onready var _escape_root: Node = get_node("../Escape")
+@onready var _media_root: Node = get_node_or_null("../Media")
 @onready var _elevators_root: Node = get_node("../Elevators")
 @onready var _terrain: TileMapLayer = get_node("../Terrain")
 
@@ -72,6 +73,20 @@ var _last_sound_slice := {}      # device index -> last progress slice that made
 # than wall clock so it obeys the same clock as everything else here, and held on
 # the server so a client cannot shorten it. There is only ever one Runner.
 var _attack_cd_left := 0.0
+
+# ---- carry / media state (GDD 4.1) ----------------------------------------
+# The Runner must carry a 破壞媒材 to a device before it can break it. One Runner,
+# one carry slot: carried_index is the medium it holds (-1 = empty-handed).
+# _media_home is the authored spawn, built on every peer in world._build_layout
+# and identical everywhere, so it needs no replication. _media_pos (where a medium
+# rests when not carried: home, a tunnel mouth after a drop, or home again after a
+# stun) and _media_consumed (spent breaking a device) ride the state sync so every
+# peer draws items the same.
+var carried_index := -1
+var _media_home := {}        # int idx -> Vector2 (authored home; NOT replicated)
+var _media_pos := {}         # int idx -> Vector2 (current resting spot; replicated)
+var _media_consumed := {}    # int idx -> bool   (spent; replicated)
+var _media_count := 0
 
 ## The vertical-travel tile layer, tolerant of common names so an accidental
 ## rename in the editor doesn't silently disable shafts. Returns null if none.
@@ -112,7 +127,7 @@ func escape_root() -> Node:
 	return _escape_root
 
 func device_total() -> int:
-	return DeviceSystem.DEVICE_COUNT
+	return devices.device_count
 
 func device_ratio(idx: int) -> float:
 	return devices.ratio(idx)
@@ -125,6 +140,44 @@ func devices_destroyed() -> int:
 
 func escape_open() -> bool:
 	return devices.all_destroyed()
+
+# ---- media facade (players / media items) ---------------------------------
+
+## Register the authored media spawns (world._build_layout, on every peer). Home
+## positions are identical everywhere, so they need no replication; only the
+## mutable bits (_media_pos / _media_consumed / carried_index) ride the sync.
+func setup_media(home_positions: Array) -> void:
+	_media_count = home_positions.size()
+	_media_home.clear()
+	_media_pos.clear()
+	_media_consumed.clear()
+	carried_index = -1
+	for i in _media_count:
+		_media_home[i] = home_positions[i]
+		_media_pos[i] = home_positions[i]
+		_media_consumed[i] = false
+
+func media_root() -> Node:
+	return _media_root
+
+func media_total() -> int:
+	return _media_count
+
+func media_carried_index() -> int:
+	return carried_index
+
+func runner_carrying() -> bool:
+	return carried_index >= 0
+
+func media_consumed(idx: int) -> bool:
+	return bool(_media_consumed.get(idx, false))
+
+## Grabbable right now: not the one already in hand, and not already spent.
+func media_available(idx: int) -> bool:
+	return idx != carried_index and not media_consumed(idx)
+
+func media_pos(idx: int) -> Vector2:
+	return _media_pos.get(idx, Vector2.ZERO)
 
 ## Progress of the device the Runner is working on right now, or -1 when it is
 ## not mashing anything (the HUD hides the bar rather than showing a stale one).
@@ -292,6 +345,10 @@ func sabotage_press() -> void:
 	var runner: Node2D = _players.get_node_or_null(str(id))
 	if runner == null or runner.get("role") != Roles.RUNNER or runner.stunned:
 		return
+	# Must have carried a 破壞媒材 here first (GDD 4.1): breaking is gated on the
+	# transport, so an empty-handed Runner cannot touch a device.
+	if carried_index < 0:
+		return
 	var idx := _device_at_runner()
 	if idx < 0:
 		return
@@ -303,6 +360,7 @@ func sabotage_press() -> void:
 	var finished := devices.hit(idx)
 	_emit_sabotage_sound(idx, runner)
 	if finished:
+		_consume_carried_media()   # the medium is spent breaking this device
 		_on_device_done()
 	else:
 		_broadcast(true)
@@ -341,6 +399,65 @@ func try_escape() -> void:
 	if not devices.all_destroyed():
 		return          # still work to do; the way out is shut
 	_set_winner(Roles.WIN_RUNNER)
+
+# ---- carry / media (GDD 4.1) ----------------------------------------------
+
+## The Runner grabbed at a medium. Which one is the SERVER's call (real overlap,
+## like sabotage), so a client cannot claim a grab from across the map. call_local
+## is required — the Runner is the host and this rpc_id(1) targets itself (see
+## sabotage_press for the full note).
+@rpc("any_peer", "call_local", "reliable")
+func pickup_press() -> void:
+	if not multiplayer.is_server() or winner != "":
+		return
+	var id := _sender_id()
+	var runner: Node2D = _players.get_node_or_null(str(id))
+	if runner == null or runner.get("role") != Roles.RUNNER or runner.stunned:
+		return
+	if carried_index >= 0:
+		return          # one slot: already carrying
+	var idx := _media_at_runner()
+	if idx < 0:
+		return
+	carried_index = idx
+	_broadcast(true)
+
+## Index of an available medium the Runner is standing on, or -1 (server truth via
+## real overlap, mirroring _device_at_runner).
+func _media_at_runner() -> int:
+	if _media_root == null:
+		return -1
+	for m in _media_root.get_children():
+		if m.has_method("runner_in_range") and m.runner_in_range():
+			return int(m.index)
+	return -1
+
+## Drop the carried medium at `pos` (a tunnel mouth). Server-only; called directly
+## from the Runner's tunnel-enter, since the Runner is the host (like the direct
+## tunnel_enter_at query). It stays at the mouth, retrievable — lighter than a
+## stun's return-home (GDD's asymmetric punishment, 4.5).
+func drop_media_at(pos: Vector2) -> void:
+	if not multiplayer.is_server() or carried_index < 0:
+		return
+	_media_pos[carried_index] = pos
+	carried_index = -1
+	_broadcast(true)
+
+## The carried medium was spent breaking a device — remove it from play.
+func _consume_carried_media() -> void:
+	if carried_index < 0:
+		return
+	_media_consumed[carried_index] = true
+	carried_index = -1
+
+## A stun sent the Runner reeling: the carried medium goes back to its spawn (GDD
+## 4.1). The transport has to be re-run, but device progress is untouched.
+func _return_carried_media_home() -> void:
+	if carried_index < 0:
+		return
+	_media_pos[carried_index] = _media_home.get(
+		carried_index, _media_pos.get(carried_index, Vector2.ZERO))
+	carried_index = -1
 
 # ---- sound exposure (GDD 4.3) --------------------------------------------
 
@@ -426,6 +543,10 @@ func attack_press() -> void:
 		return
 	if runner.stunned or _attack_cd_left > 0.0:
 		return
+	# Hands full: no kill while carrying a medium (GDD 4.6). The Runner has to put
+	# the transport at risk to keep advancing, and can't clear a pincer mid-ferry.
+	if carried_index >= 0:
+		return
 	var victim := _kill_target(runner)
 	if victim == null:
 		return          # swung at nothing: no kill, and no cooldown burned
@@ -470,11 +591,14 @@ func _knock_back(h: Node2D, runner: Node2D) -> void:
 	runner.knockback.rpc_id(
 		runner.get_multiplayer_authority(), dir * KnockSystem.KNOCKBACK_VX)
 
-## Third knock landed: stun the Runner and knock back whatever it was breaking.
-## The rollback is the real cost — the stun alone is just seconds.
+## Third knock landed: stun the Runner and send whatever it was carrying home.
+## Device progress is a permanent ratchet now (GDD 4.1) — it never rolls back, so
+## the stun's cost is the medium going home (a re-run transport) plus the seconds
+## frozen, NOT lost ground. A stun while empty-handed is only the seconds.
 func _on_stun() -> void:
 	var runner := _find_runner()
-	devices.on_runner_stunned()
+	_return_carried_media_home()
+	devices.active_index = -1        # drop the focus; the progress itself stays
 	if runner != null:
 		# Run the stun on the Runner's OWN peer. The old code wrote the Runner's
 		# stun timer directly on the host because "host == Runner" — which silently
@@ -557,7 +681,7 @@ func _set_winner(w: String) -> void:
 ## a snapshot from the old grapple/key build has `installs` and no device
 ## progress, so restoring it would silently produce a nonsense round (every device
 ## intact, but the state it was saved with long gone) rather than fail loudly.
-const SNAPSHOT_VERSION := 4
+const SNAPSHOT_VERSION := 5
 
 func snapshot_state() -> Dictionary:
 	return {
@@ -572,6 +696,9 @@ func snapshot_state() -> Dictionary:
 		"stun": knock.stun_left,
 		"zones": zones.snapshot(),
 		"elev": elevators.snapshot(),
+		"carried": carried_index,
+		"mpos": _media_pos.duplicate(),
+		"mcons": _media_consumed.duplicate(),
 	}
 
 func restore_state(d: Dictionary) -> void:
@@ -587,6 +714,9 @@ func restore_state(d: Dictionary) -> void:
 	knock.stun_left = float(d.get("stun", 0.0))
 	zones.restore(d.get("zones", {}))
 	elevators.restore(d.get("elev", {}))
+	carried_index = int(d.get("carried", -1))
+	_media_pos = (d.get("mpos", {}) as Dictionary).duplicate()
+	_media_consumed = (d.get("mcons", {}) as Dictionary).duplicate()
 	_broadcast(true)   # push the restored state to every peer's HUD
 
 func _state_dict() -> Dictionary:
@@ -603,6 +733,9 @@ func _state_dict() -> Dictionary:
 		"winner": winner,
 		"zlock": zones.lockdown,
 		"zcool": zones.cooldown,
+		"carried": carried_index,
+		"mpos": _media_pos,
+		"mcons": _media_consumed,
 	}
 
 func _apply_state(d: Dictionary) -> void:
@@ -619,6 +752,9 @@ func _apply_state(d: Dictionary) -> void:
 	winner = str(d.get("winner", ""))
 	zones.lockdown = (d.get("zlock", {}) as Dictionary).duplicate()
 	zones.cooldown = (d.get("zcool", {}) as Dictionary).duplicate()
+	carried_index = int(d.get("carried", -1))
+	_media_pos = (d.get("mpos", {}) as Dictionary).duplicate()
+	_media_consumed = (d.get("mcons", {}) as Dictionary).duplicate()
 	state_changed.emit()
 
 func _broadcast(reliable: bool) -> void:
