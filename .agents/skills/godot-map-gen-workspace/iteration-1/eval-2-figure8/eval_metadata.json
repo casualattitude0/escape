@@ -1,0 +1,14 @@
+{
+  "eval_id": 2,
+  "eval_name": "figure8-5-rooms",
+  "prompt": "I need a Go level generator that creates a figure-8 map layout — two loops sharing a central room. 5 rooms total. Include crawl tunnels (1 tile high) and drop shafts. Make sure the player metrics are respected (jump rise <= 3 tiles, 2 clear rows for standing). Output as level3.tscn.",
+  "assertions": [
+    {"text": "Go program compiles without errors", "type": "programmatic"},
+    {"text": "Output .tscn has correct format: [gd_scene format=4], TileMapLayer node, PackedByteArray, correct tileset ext_resource", "type": "programmatic"},
+    {"text": "Map has 5 distinct rooms", "type": "manual"},
+    {"text": "Figure-8 topology: two loops sharing a central room", "type": "manual"},
+    {"text": "Crawl tunnels present (1-tile-high passages)", "type": "manual"},
+    {"text": "Drop shafts present (vertical one-way connections)", "type": "manual"},
+    {"text": "Platform spacing respects jump rise <= 3 tiles and standing clearance >= 2 rows", "type": "manual"}
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "metadata": {
+    "skill_name": "godot-map-gen",
+    "skill_path": "/Users/attitudecasual/Developer/Godot/escape/.claude/skills/godot-map-gen",
+    "executor_model": "claude-opus-4-6",
+    "timestamp": "2026-07-17",
+    "evals_run": ["eval-0-ring-loop", "eval-1-arena-hub", "eval-2-figure8"],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_name": "ring-loop-4-rooms",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 6,
+      "total": 6,
+      "time_seconds": 81.2,
+      "tokens": 38275
+    },
+    {
+      "eval_name": "ring-loop-4-rooms",
+      "config": "without_skill",
+      "pass_rate": 1.0,
+      "passed": 6,
+      "total": 6,
+      "time_seconds": 133.6,
+      "tokens": 35504
+    },
+    {
+      "eval_name": "arena-hub-3-rooms",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 6,
+      "total": 6,
+      "time_seconds": 105.1,
+      "tokens": 39879
+    },
+    {
+      "eval_name": "arena-hub-3-rooms",
+      "config": "without_skill",
+      "pass_rate": 0.83,
+      "passed": 5,
+      "total": 6,
+      "time_seconds": 90.5,
+      "tokens": 32381
+    },
+    {
+      "eval_name": "figure8-5-rooms",
+      "config": "with_skill",
+      "pass_rate": 1.0,
+      "passed": 7,
+      "total": 7,
+      "time_seconds": 387.0,
+      "tokens": 54040
+    },
+    {
+      "eval_name": "figure8-5-rooms",
+      "config": "without_skill",
+      "pass_rate": 1.0,
+      "passed": 7,
+      "total": 7,
+      "time_seconds": 124.1,
+      "tokens": 34781
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "mean_pass_rate": 1.0,
+      "mean_time_seconds": 191.1,
+      "mean_tokens": 44065
+    },
+    "without_skill": {
+      "mean_pass_rate": 0.94,
+      "mean_time_seconds": 116.1,
+      "mean_tokens": 34222
+    },
+    "delta": {
+      "pass_rate": "+0.06",
+      "time_seconds": "+75.0",
+      "tokens": "+9843"
+    },
+    "notes": [
+      "With-skill runs achieved 100% pass rate vs 94% baseline (baseline eval-1 used format=3 instead of format=4)",
+      "With-skill runs used more tokens on average due to reading skill+reference files",
+      "With-skill figure-8 eval took significantly longer (387s vs 124s) — possibly due to more thorough platform/tunnel design",
+      "Key qualitative difference: with-skill runs consistently used per-room background styling and followed tag-game design patterns (loops, asymmetric traversal)"
+    ]
+  }
+}

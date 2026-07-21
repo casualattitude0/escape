@@ -1,0 +1,23 @@
+{
+  "skill_name": "godot-map-gen",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Write a Go program that generates a new level3.tscn with 4 rooms connected in a ring loop. Each room should have some platforms inside. Include both boundary and background tiles. Output to scenes/levels/level3.tscn using terrain_tileset.tres.",
+      "expected_output": "A working Go program that produces a valid .tscn file with boundary tiles (source 0) and background tiles (source 3), 4 rooms in a ring with no dead ends, platforms inside rooms, correct binary encoding",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "Create a Go map generator for a small arena-style level: one big central hub room with 2 smaller side rooms, connected by tunnels. The hub should have lots of platforms for vertical chasing. Use background tiles to make each room look different. Write it as a complete Go program that outputs a .tscn file.",
+      "expected_output": "A Go program with 3 rooms (1 hub + 2 side), tunnels connecting them, varied background tile regions per room, hub has vertical platforms with jump rise <= 3 tiles, correct .tscn output",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I need a Go level generator that creates a figure-8 map layout — two loops sharing a central room. 5 rooms total. Include crawl tunnels (1 tile high) and drop shafts. Make sure the player metrics are respected (jump rise <= 3 tiles, 2 clear rows for standing). Output as level3.tscn.",
+      "expected_output": "A Go program with 5 rooms in figure-8 topology, crawl tunnels, drop shafts, all jump gaps <= 3 tiles, standing clearance >= 2 rows, both boundary and background tiles, valid .tscn",
+      "files": []
+    }
+  ]
+}

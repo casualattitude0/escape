@@ -1,0 +1,13 @@
+{
+  "eval_id": 0,
+  "eval_name": "ring-loop-4-rooms",
+  "prompt": "Write a Go program that generates a new level3.tscn with 4 rooms connected in a ring loop. Each room should have some platforms inside. Include both boundary and background tiles. Output to scenes/levels/level3.tscn using terrain_tileset.tres.",
+  "assertions": [
+    {"text": "Go program compiles without errors", "type": "programmatic"},
+    {"text": "Output .tscn has correct format: [gd_scene format=4], TileMapLayer node, PackedByteArray, correct tileset ext_resource", "type": "programmatic"},
+    {"text": "Map has 4 distinct rooms carved from the solid grid", "type": "manual"},
+    {"text": "All rooms connect to at least 2 others forming a ring (no dead ends)", "type": "manual"},
+    {"text": "Encoder uses both source_id=0 (boundary) and source_id=3 (background)", "type": "programmatic"},
+    {"text": "Rooms have interior platforms (fill calls inside carved areas)", "type": "manual"}
+  ]
+}

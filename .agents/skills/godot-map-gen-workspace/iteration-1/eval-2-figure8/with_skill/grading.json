@@ -1,0 +1,11 @@
+{
+  "expectations": [
+    {"text": "Go program compiles without errors", "passed": true, "evidence": "go build succeeded with no errors"},
+    {"text": "Output .tscn has correct format", "passed": true, "evidence": "Contains gd_scene format=4, TileMapLayer, PackedByteArray, terrain_tileset.tres reference"},
+    {"text": "Map has 5 distinct rooms", "passed": true, "evidence": "5 rooms: Hub (center), Upper Left, Upper Right, Lower Left, Lower Right"},
+    {"text": "Figure-8 topology: two loops sharing a central room", "passed": true, "evidence": "Top loop: Room2->Hub->Room3->crawl tunnel->Room2. Bottom loop: Room4->Hub->Room5->crawl tunnel->Room4"},
+    {"text": "Crawl tunnels present (1-tile-high passages)", "passed": true, "evidence": "10 crawl/tunnel mentions, tunnels at y=10 and y=48 exactly 1 tile high"},
+    {"text": "Drop shafts present", "passed": true, "evidence": "Left shaft (x=15-17) Room2->Room4, Right shaft (x=82-84) Room3->Room5 with climb platforms"},
+    {"text": "Player metrics respected", "passed": true, "evidence": "Alternating platforms spaced 3 tiles apart, 2+ clear rows for standing"}
+  ]
+}

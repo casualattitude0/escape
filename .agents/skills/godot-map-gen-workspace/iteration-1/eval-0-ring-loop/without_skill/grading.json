@@ -1,0 +1,10 @@
+{
+  "expectations": [
+    {"text": "Go program compiles without errors", "passed": true, "evidence": "go build succeeded with no errors"},
+    {"text": "Output .tscn has correct format", "passed": true, "evidence": "Contains gd_scene format=4, TileMapLayer, PackedByteArray, terrain_tileset.tres reference"},
+    {"text": "Map has 4 distinct rooms carved from the solid grid", "passed": true, "evidence": "4 rooms carved with corridors between them"},
+    {"text": "All rooms connect to at least 2 others forming a ring", "passed": true, "evidence": "4 corridors forming a ring loop"},
+    {"text": "Encoder uses both source_id=0 and source_id=3", "passed": true, "evidence": "srcBackground=3 used for air cells inside rooms"},
+    {"text": "Rooms have interior platforms", "passed": true, "evidence": "6 fill calls adding thin shelf platforms (row 11)"}
+  ]
+}
