@@ -12,15 +12,15 @@ class_name ShaftSystem
 ## cells is one shaft; its two mouths are the open cells just past the top and
 ## bottom ends. Standing at either mouth and pressing slide rides to the other.
 
-const ENTER_X_TILES := 1.0   # horizontal tolerance at a mouth (tile widths)
-const ENTER_Y_TILES := 0.7   # vertical reach into a mouth cell (tile heights)
+const ENTER_X_TILES := 1.0        # horizontal alignment tolerance with the column (tile widths)
+const ENTER_Y_MARGIN_TILES := 0.9 # vertical slack beyond the floor at each end (tile heights)
 const FOOT_OFFSET := 36.0    # player origin sits this far above its feet (see player.tscn)
 const FLOOR_SCAN := 12       # cells searched downward for the floor under a mouth
 
 var _layer: TileMapLayer
 var _terrain: TileMapLayer
 var _tile: Vector2 = Vector2(32, 32)
-var _shafts: Array = []      # each: {"a": Vector2 top mouth, "b": Vector2 bottom mouth}
+var _shafts: Array = []      # each shaft's column, end mouths (ride targets), and end tiles
 
 ## Scan the shaft layer into paired mouths. Cheap; run on every peer at load.
 func setup(shaft_layer: TileMapLayer, terrain: TileMapLayer) -> void:
@@ -53,12 +53,16 @@ func _build() -> void:
 		_add_run(x, start, prev)
 
 func _add_run(x: int, y0: int, y1: int) -> void:
+	var col_x := _layer.map_to_local(Vector2i(x, y0)).x
 	_shafts.append({
-		"a": _mouth_pos(Vector2i(x, y0 - 1)),   # top mouth (open cell above the run)
-		"b": _mouth_pos(Vector2i(x, y1 + 1)),   # bottom mouth (open cell below the run)
-		# Centers of the end tiles themselves, for placing the on-tile hint.
-		"a_tile": _layer.map_to_local(Vector2i(x, y0)),
-		"b_tile": _layer.map_to_local(Vector2i(x, y1)),
+		"col_x": col_x,                                    # column center (world x)
+		# Top end = standing on top of the shaft's top tile. Do NOT floor-scan
+		# down here: a shaft with no terrain in its column would scan straight
+		# through to the bottom floor, collapsing both ends onto one point.
+		"top_mouth": Vector2(col_x, y0 * _tile.y - FOOT_OFFSET),
+		"bot_mouth": _mouth_pos(Vector2i(x, y1 + 1)),      # floor below the shaft
+		"top_tile": _layer.map_to_local(Vector2i(x, y0)),  # end tile centers (on-tile hint)
+		"bot_tile": _layer.map_to_local(Vector2i(x, y1)),
 	})
 
 ## Standing position at a mouth cell: the cell center in x, dropped so the
@@ -73,27 +77,36 @@ func _mouth_pos(cell: Vector2i) -> Vector2:
 				return Vector2(center.x, below.y * _tile.y - FOOT_OFFSET)
 	return center
 
-## If pos sits at a shaft mouth, the far mouth to ride to; else null.
-func mouth_at(pos: Vector2):
+## The shaft the Hunter at pos can use, plus which end they're at. A shaft is a
+## column-aligned vertical band from the floor above to the floor below, so
+## standing anywhere under (or over) the shaft column counts — robust to the gap
+## between the shaft's end tile and the floor the Hunter actually stands on.
+## Returns {"s": shaft, "from_bottom": bool}, or an empty dict if not at a shaft.
+func _find(pos: Vector2) -> Dictionary:
 	var rx := _tile.x * ENTER_X_TILES
-	var ry := _tile.y * ENTER_Y_TILES
+	var m := _tile.y * ENTER_Y_MARGIN_TILES
 	for s in _shafts:
-		var a: Vector2 = s["a"]
-		var b: Vector2 = s["b"]
-		if absf(pos.x - a.x) <= rx and absf(pos.y - a.y) <= ry:
-			return b
-		if absf(pos.x - b.x) <= rx and absf(pos.y - b.y) <= ry:
-			return a
-	return null
+		if absf(pos.x - s["col_x"]) > rx:
+			continue
+		if pos.y < s["top_mouth"].y - m or pos.y > s["bot_mouth"].y + m:
+			continue
+		var mid: float = (s["top_tile"].y + s["bot_tile"].y) * 0.5
+		return {"s": s, "from_bottom": pos.y >= mid}
+	return {}
 
-## If pos sits at a shaft mouth, the center of the nearest shaft tile (for the
-## on-tile hint); else null.
+## If pos is at a shaft, the far end to ride to; else null.
+func mouth_at(pos: Vector2):
+	var f := _find(pos)
+	if f.is_empty():
+		return null
+	var s: Dictionary = f["s"]
+	return s["top_mouth"] if f["from_bottom"] else s["bot_mouth"]
+
+## If pos is at a shaft, the center of the nearest end tile (for the on-tile
+## hint); else null.
 func hint_pos(pos: Vector2):
-	var rx := _tile.x * ENTER_X_TILES
-	var ry := _tile.y * ENTER_Y_TILES
-	for s in _shafts:
-		if absf(pos.x - s["a"].x) <= rx and absf(pos.y - s["a"].y) <= ry:
-			return s["a_tile"]
-		if absf(pos.x - s["b"].x) <= rx and absf(pos.y - s["b"].y) <= ry:
-			return s["b_tile"]
-	return null
+	var f := _find(pos)
+	if f.is_empty():
+		return null
+	var s: Dictionary = f["s"]
+	return s["bot_tile"] if f["from_bottom"] else s["top_tile"]
