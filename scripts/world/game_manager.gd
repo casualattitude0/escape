@@ -40,6 +40,9 @@ var time_left := MATCH_TIME
 @onready var knock: KnockSystem = $KnockSystem
 @onready var zones: ZoneSystem = $ZoneSystem
 @onready var elevators: ElevatorSystem = $ElevatorSystem
+# The Runner's horizontal fast-travel. Built in code (no scene node) so levels
+# only need the "Tunnel" TileMapLayer, nothing wired per-instance.
+var tunnels := TunnelSystem.new()
 @onready var _players: Node = get_node("../Players")
 @onready var _devices_root: Node = get_node("../Devices")
 @onready var _escape_root: Node = get_node("../Escape")
@@ -64,6 +67,8 @@ var _attack_cd_left := 0.0
 func _ready() -> void:
 	add_to_group("game_manager")
 	elevators.setup(_elevators_root, _players)
+	add_child(tunnels)
+	tunnels.setup(get_node_or_null("../Tunnel") as TileMapLayer, _terrain)
 	set_physics_process(multiplayer.is_server())
 
 # ---- read facade (HUD / players / devices / escape) ------------------------
@@ -189,6 +194,14 @@ func elevator_press() -> void:
 ## Read facade: is this peer currently riding an elevator?
 func is_riding(peer_id: int) -> bool:
 	return elevators.is_riding(peer_id)
+
+# ---- tunnels (Runner horizontal fast-travel) ------------------------------
+
+## If a Runner at `pos` is standing at a tunnel mouth, the entry/far mouths to
+## hold them between; else null. The Runner is the host, so the body queries this
+## directly (no rpc) — see player._physics_process.
+func tunnel_enter_at(pos: Vector2):
+	return tunnels.enter_at(pos)
 
 # ---- sabotage (GDD 4.1) ---------------------------------------------------
 

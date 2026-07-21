@@ -8,6 +8,7 @@ extends CharacterBody2D
 ## Roles: Runner (the monster) breaks the facility and escapes; can slide tunnels
 ## and kill. Hunter (the researcher) walks only and knocks the Runner to stun it.
 
+const PIPE_PEEK_CAM := 120.0  # how far the camera leans outside the current pipe end (peek)
 const STUN_DRAG := 900.0     # how fast a stunned Runner's knockback slide bleeds off
 const KNOCK_HOP := -90.0     # small pop on a knock so the kick reads as a hit, not a nudge
 const KNOCK_STAGGER := 0.38  # Runner: no steering right after a knock, so the shove lands
@@ -46,6 +47,17 @@ var spawn_point: Vector2 = Vector2.ZERO
 var _ride_start_pos: Vector2
 var _ride_end_pos: Vector2
 var _ride_timer: float = 0.0
+
+# Wall-tunnel travel (owner only, while tunneling == true). Entering whisks the
+# Runner straight to the far end; from an end they peek outside (camera leans
+# out) and either tap outward to emerge or tap inward to shuttle to the other end.
+var tunneling: bool = false
+var _tunnel_a: Vector2        # entry mouth (emerge point on the entry side)
+var _tunnel_b: Vector2        # far mouth (emerge point on the far side)
+var _tunnel_a_in: Vector2     # peek spot just inside the entry end
+var _tunnel_b_in: Vector2     # peek spot just inside the far end
+var _tunnel_fwd: float = 0.0  # world x-sign pointing from entry toward far
+var _tunnel_at_b: bool = true # which end they're currently peeking out of
 
 # The GameManager (server-authoritative match state), found once.
 var gm: Node
@@ -102,6 +114,43 @@ func _physics_process(delta: float) -> void:
 		animator.publish(delta)
 		return
 
+	# Inside a wall-tunnel, peeking out one end (the camera leans outside so the
+	# Runner can scout before committing). A directional tap decides: outward
+	# (away from the pipe) emerges here; inward shuttles instantly to the other
+	# end to peek there. Emerging is noisy.
+	if tunneling:
+		velocity = Vector2.ZERO
+		var out_dir := _tunnel_fwd if _tunnel_at_b else -_tunnel_fwd
+		var inside: Vector2 = _tunnel_b_in if _tunnel_at_b else _tunnel_a_in
+		var mouth: Vector2 = _tunnel_b if _tunnel_at_b else _tunnel_a
+		var tap := 0.0
+		if not Net.local_input_locked:
+			if Input.is_action_just_pressed("move_right"):
+				tap = 1.0
+			elif Input.is_action_just_pressed("move_left"):
+				tap = -1.0
+		if tap != 0.0 and tap == out_dir:
+			# Push outward from this end -> emerge out of the pipe into the world.
+			global_position = mouth
+			net_pos = mouth
+			tunneling = false
+			camera.offset = Vector2.ZERO
+			if gm != null:
+				gm.emit_sound(mouth)
+			animator.publish(delta)
+			return
+		if tap != 0.0:
+			# Push inward -> shuttle to the other end (instant) and peek there.
+			_tunnel_at_b = not _tunnel_at_b
+			out_dir = _tunnel_fwd if _tunnel_at_b else -_tunnel_fwd
+			inside = _tunnel_b_in if _tunnel_at_b else _tunnel_a_in
+		# Held inside the pipe, peeking out the current end.
+		global_position = inside
+		net_pos = inside
+		camera.offset = Vector2(out_dir * PIPE_PEEK_CAM, 0.0)
+		animator.force_pose(Anim.CROUCH, out_dir < 0.0)
+		return
+
 	# Stunned by a third knock: frozen, and the knockback carries us as we fall.
 	# Stun beats everything — it is the Hunters' whole payoff for landing three.
 	if stunned:
@@ -116,6 +165,28 @@ func _physics_process(delta: float) -> void:
 		movement.freeze()
 		animator.publish(delta)
 		return
+
+	# Enter a wall-tunnel: press slide at a mouth to slip inside and hold there
+	# (see the `tunneling` block above for how they leave). Consumes the press so
+	# it wins over the crouch/slide the same key starts, and is noisy like other
+	# Runner acts (GDD 4.3). Blocked while stiff/exit-stunned.
+	if role == Roles.RUNNER and gm != null and Input.is_action_just_pressed("slide") \
+			and not combat.stiff_active() and not movement.exit_stun_active():
+		var t = gm.tunnel_enter_at(global_position)
+		if t != null:
+			_tunnel_a = t["entry"]
+			_tunnel_b = t["far"]
+			_tunnel_a_in = t["entry_in"]
+			_tunnel_b_in = t["far_in"]
+			_tunnel_fwd = signf(_tunnel_b.x - _tunnel_a.x)
+			_tunnel_at_b = true          # whisk them to the far end, held inside, peeking out
+			tunneling = true
+			velocity = Vector2.ZERO
+			global_position = _tunnel_b_in
+			net_pos = global_position
+			gm.emit_sound(_tunnel_b_in)  # noisy: they rush through to the far side
+			animator.force_pose(Anim.CROUCH, _tunnel_fwd < 0.0)
+			return
 
 	movement.update_tunnel(delta)
 	combat.tick_stiff(delta)

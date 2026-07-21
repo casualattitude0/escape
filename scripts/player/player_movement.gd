@@ -161,11 +161,18 @@ func locomotion_anim() -> String:
 
 func _apply_horizontal(dir: float, delta: float, immobile: bool, on_floor: bool) -> void:
 	if immobile:
-		body.velocity.x = move_toward(body.velocity.x, 0.0, friction * 2.0 * delta)
+		if exit_stun_left > 0.0:
+			# Rolling out of a tunnel: bleed the slide momentum off gently so the
+			# tumble carries across the ground in the exit direction, instead of
+			# stopping dead and spinning on the spot.
+			body.velocity.x = move_toward(body.velocity.x, 0.0, slide_friction * delta)
+		else:
+			body.velocity.x = move_toward(body.velocity.x, 0.0, friction * 2.0 * delta)
 		return
 	if crouched:
 		if head_check.is_colliding():
-			# In a tunnel: locked-direction full-speed slide to the exit.
+			# In a low-ceiling slide space: locked-direction full-speed slide to
+			# the exit (too short to stand/walk, so the Runner slides through).
 			var s := signf(body.velocity.x)
 			if s == 0.0:
 				s = dir

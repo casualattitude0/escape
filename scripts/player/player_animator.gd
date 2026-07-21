@@ -63,9 +63,24 @@ func render() -> void:
 ## Authority only: choose the animation, play it, and publish for remote copies.
 ## `delta` drives the LAND/RUN_STOP lockout timers (they hold their anim for a
 ## fixed duration regardless of how fast locomotion_anim() changes underneath).
+## Force a fixed pose, bypassing locomotion — used while the Runner is inside a
+## tunnel/pipe. Drives the local sprite and the replicated net_anim/net_flip
+## directly so every peer sees the same held pose.
+func force_pose(anim: String, flip: bool) -> void:
+	body.net_anim = anim
+	body.net_flip = flip
+	sprite.flip_h = flip
+	if sprite.animation != anim:
+		sprite.play(anim)
+
 func publish(delta: float) -> void:
 	var dir: float = body.movement.last_dir
-	if body.movement.sliding:
+	if body.movement.exit_stun_active():
+		# The tunnel-exit roll faces the way it travels, so it reads as rolling
+		# across the ground rather than tumbling in place.
+		if absf(body.velocity.x) > 1.0:
+			sprite.flip_h = body.velocity.x < 0.0
+	elif body.movement.sliding:
 		pass                              # locked facing: don't flip mid-slide
 	elif dir != 0.0:
 		sprite.flip_h = dir < 0.0
