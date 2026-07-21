@@ -17,7 +17,7 @@ class_name DeviceSystem
 ## So the Hunters cannot un-break what is broken; their only lever is time.
 
 const DEVICE_COUNT := 4          # default device count (fallback when none authored)
-const HITS_PER_DEVICE := 10      # accepted mashes to break one device
+const HITS_PER_DEVICE := 20      # accepted mashes to break one device
 const DEVICE_RANGE := 48.0       # how close the Runner must be to mash a device
 
 # Actual number of devices in play. Devices are authored (painted on Device_tiles
