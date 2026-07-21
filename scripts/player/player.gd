@@ -266,7 +266,7 @@ func knockback(vx: float) -> void:
 	combat.stagger(KNOCK_STAGGER)
 
 @rpc("any_peer", "call_local", "reliable")
-func ride_start(start_pos: Vector2, end_pos: Vector2) -> void:
+func ride_start(start_pos: Vector2, end_pos: Vector2, hide: bool) -> void:
 	if not _from_server():
 		return
 	riding = true
@@ -274,6 +274,7 @@ func ride_start(start_pos: Vector2, end_pos: Vector2) -> void:
 	_ride_end_pos = end_pos
 	_ride_timer = 0.0
 	velocity = Vector2.ZERO
+	sprite.visible = not hide   # shafts hide the rider; elevators keep them shown
 
 @rpc("any_peer", "call_local", "reliable")
 func ride_end(final_pos: Vector2) -> void:
@@ -282,3 +283,4 @@ func ride_end(final_pos: Vector2) -> void:
 	riding = false
 	global_position = final_pos
 	velocity = Vector2.ZERO
+	sprite.visible = true       # reappear on arrival

@@ -217,7 +217,7 @@ func elevator_press() -> void:
 	if not elevators.try_ride(h):
 		return
 	var ride: Dictionary = elevators._riding[id]
-	h.ride_start.rpc_id(id, ride["start_pos"], ride["end_pos"])
+	h.ride_start.rpc_id(id, ride["start_pos"], ride["end_pos"], false)   # elevator: rider stays visible
 	emit_sound(h.global_position)
 
 ## Read facade: is this peer currently riding an elevator?
@@ -256,7 +256,7 @@ func shaft_press() -> void:
 	if dest == null:
 		return
 	elevators.begin_ride(id, h.global_position, dest)
-	h.ride_start.rpc_id(id, h.global_position, dest)
+	h.ride_start.rpc_id(id, h.global_position, dest, true)   # shaft: hide the rider in the pipe
 	emit_sound(h.global_position)
 
 # ---- tunnels (Runner horizontal fast-travel) ------------------------------
