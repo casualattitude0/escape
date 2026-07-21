@@ -9,7 +9,7 @@ class_name PlayerMovement
 @export var speed: float = 220.0
 @export var crawl_speed: float = 110.0
 @export var slide_speed: float = 330.0
-@export var jump_velocity: float = -470.0
+@export var jump_velocity: float = -533.0  # ~145px rise (g=980, apex-softened): +1 tile (32px) over the old -470
 @export var acceleration: float = 1800.0
 @export var friction: float = 2000.0
 @export var slide_friction: float = 650.0
