@@ -96,7 +96,7 @@ script = ExtResource("12")
 [node name="MediaSpawns" type="Node2D" parent="." unique_id=700000001]
 
 [node name="MediaSpawn0" type="Marker2D" parent="MediaSpawns" unique_id=700000002]
-position = Vector2(-697, -602)
+position = Vector2(-480, -611)
 
 [node name="MediaSpawn1" type="Marker2D" parent="MediaSpawns" unique_id=700000003]
 position = Vector2(319, -602)
